@@ -27,7 +27,7 @@ import warnings
 # UserWarning 무시
 warnings.filterwarnings("ignore", category=UserWarning)
 
-sys.stdout = open('./greedyTAS/greedyTAS-epoch20-test/autoformer-greedyTAS(dss2)-20epoch.log', 'w')
+sys.stdout = open('./greedyTAS/greedyTAS-epoch200-top-k.log', 'w')
 sys.stderr = sys.stdout
 
 
@@ -184,7 +184,8 @@ def get_args_parser():
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
-    parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
+    # parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
+    parser.add_argument('--dist_url', default='tcp://localhost:2041', help='url used to set up distributed training')
 
     parser.add_argument('--amp', action='store_true')
     parser.add_argument('--no-amp', action='store_false', dest='amp')
@@ -382,8 +383,8 @@ def main(args):
             candidate_pool=candidate_pool, 
             validation_data_loader=data_loader_val, 
             pool_sampling_prob=pool_sampling_prob,  # Pass candidate_pool and sampling probability
-            m=10,  # Number of sampled paths
-            k=5    # Number of top paths to train on
+            m=2500,  # Number of sampled paths
+            k=1250    # Number of top paths to train on
         )
 
         lr_scheduler.step(epoch)
@@ -404,19 +405,19 @@ def main(args):
         test_stats = evaluate(
             data_loader_val, model, device, amp=args.amp, 
             choices=choices, mode=args.mode, retrain_config=retrain_config,
-            candidate_pool=candidate_pool, pool_sampling_prob=pool_sampling_prob  # Pass candidate_pool and sampling probability to evaluation
+            # candidate_pool=candidate_pool, pool_sampling_prob=pool_sampling_prob  # Pass candidate_pool and sampling probability to evaluation
         )
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
         max_accuracy = max(max_accuracy, test_stats["acc1"])
         print(f'Max accuracy: {max_accuracy:.2f}%')
     
-        # # Log current candidate pool items, each on a new line
-        # print("Current candidate pool:")
-        # for idx, item in enumerate(candidate_pool):
-        #     print(f"{idx + 1}: {item}")
+        # Log current candidate pool items, each on a new line
+        print("Current candidate pool:")
+        for idx, item in enumerate(candidate_pool):
+            print(f"{idx + 1}: {item}")
         
-        # # Log the current pool_sampling_prob
-        # print(f"Current pool_sampling_prob: {pool_sampling_prob:.4f}")
+        # Log the current pool_sampling_prob
+        print(f"Current pool_sampling_prob: {pool_sampling_prob:.4f}")
 
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                      **{f'test_{k}': v for k, v in test_stats.items()},
