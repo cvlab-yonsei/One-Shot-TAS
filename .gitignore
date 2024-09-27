@@ -1,0 +1,26 @@
+checkpoint/
+*.pyc
+/*.log
+*ptm
+.vscode
+*visualize_images*/
+*_tsne_*
+*hard_triplet_*
+*_feature.pkl
+Visualize_Network_*
+hard_mining/
+backup.py
+*pdf
+*.bak*
+# *.sh
+*.log
+*.pkl
+*.tar
+*.pth
+AutoFormer/tftasenv
+AutoFormer/Python-3.6.15
+AutoFormer/autoformer3.6
+*.tgz
+config.txt
+AutoFormer/greedyTAS/autoformer-greedyTAS-09121607-greedy.log
+AutoFormer/greedyTAS/autoformer-greedyTAS(09121607)-greedy.log
