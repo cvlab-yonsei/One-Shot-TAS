@@ -419,7 +419,8 @@ def get_args_parser():
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
-    parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
+    # parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
+    parser.add_argument('--dist_url', default='tcp://localhost:2042', help='url used to set up distributed training')
     parser.add_argument('--amp', action='store_true')
     parser.add_argument('--no-amp', action='store_false', dest='amp')
     parser.set_defaults(amp=True)

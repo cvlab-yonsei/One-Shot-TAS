@@ -27,7 +27,7 @@ import warnings
 # UserWarning 무시
 warnings.filterwarnings("ignore", category=UserWarning)
 
-sys.stdout = open('./greedyTAS/greedyTAS-epoch200-top-k.log', 'w')
+sys.stdout = open('./greedyTAS/greedyTAS-epoch20-top-k.log', 'w')
 sys.stderr = sys.stdout
 
 
@@ -255,7 +255,8 @@ def main(args):
     )
 
     data_loader_val = torch.utils.data.DataLoader(
-        dataset_val, batch_size=int(2 * args.batch_size),
+        dataset_val, batch_size=1024,
+        # dataset_val, batch_size=int(2 * args.batch_size),
         sampler=sampler_val, num_workers=args.num_workers,
         pin_memory=args.pin_mem, 
         drop_last=True, persistent_workers=True

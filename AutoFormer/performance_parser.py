@@ -82,7 +82,8 @@ def parse_evolution_log(file_path):
                 current_config['acc1'] = acc1
                 current_config['acc5'] = acc5
                 current_config['loss'] = loss
-                current_config['id'] = int(i/2)
+                # current_config['id'] = int(i/2)
+                current_config['id'] = int(i)
                 
                 # 모든 정보가 취합된 딕셔너리를 결과 리스트에 추가
                 results.append(current_config)
@@ -93,14 +94,18 @@ def parse_evolution_log(file_path):
 
 # 파일 경로 사용 예
 # file_path = "./greedyTAS/greedyTAS-epoch60/autoformer-greedyTAS(09131747).log"
-file_path = "./greedyTAS/greedyTAS-epoch20-test/autoformer-greedyTAS(dss)-20epoch-subnet.log"
+
+# file_path = "./greedyTAS/greedyTAS-epoch20-test/autoformer-greedyTAS(dss)-20epoch-subnet.log"
+file_path = "./greedyTAS/m(2500)_path_epoch100-subnet.log"
+
 results = parse_evolution_log(file_path)
 print(len(results))  # 결과 출력
 
 # non_matching_indices = find_non_matching_pairs(results)
 # print("Non-matching indices:", non_matching_indices)
 
-results_no_duplicates = remove_duplicates(results)
+# results_no_duplicates = remove_duplicates(results)
+results_no_duplicates = results
 print(len(results_no_duplicates))  # 중복 제거된 결과 출력
 print(results_no_duplicates[0])
 print(results_no_duplicates[1])
@@ -109,22 +114,22 @@ print(results_no_duplicates[-1])
 
 # a.pkl 파일 경로
 # a_pkl_path = "./greedyTAS/greedyTAS-epoch60/autoformer-greedyTAS(09131747).log"
-a_pkl_path = "./greedyTAS/greedyTAS-epoch20-test/autoformer-greedyTAS(dss)-20epoch.pkl"  # 실제 파일 경로로 변경하세요
+# a_pkl_path = "./greedyTAS/greedyTAS-epoch20-test/autoformer-greedyTAS(dss)-20epoch.pkl"  # 실제 파일 경로로 변경하세요
 
-# a.pkl 파일 로드
-a_pkl_data = load_pkl(a_pkl_path)
+# # a.pkl 파일 로드
+# a_pkl_data = load_pkl(a_pkl_path)
 
-# inter_loss 값을 추가
-results_with_inter_loss = add_inter_loss(results_no_duplicates, a_pkl_data)
+# # inter_loss 값을 추가
+# results_with_inter_loss = add_inter_loss(results_no_duplicates, a_pkl_data)
 
-# 결과 출력 (예시)
-print(results_with_inter_loss[0])
-print(results_with_inter_loss[1])
-print(results_with_inter_loss[2])
-print(results_with_inter_loss[-1])
+# # 결과 출력 (예시)
+# print(results_with_inter_loss[0])
+# print(results_with_inter_loss[1])
+# print(results_with_inter_loss[2])
+# print(results_with_inter_loss[-1])
 
 # Save the transformed data to a new pickle file
-with open('./greedyTAS/greedyTAS-epoch20-test/autoformer-greedyTAS(dss)-20epoch-subnet.pkl', 'wb') as file:
-    pickle.dump(results_with_inter_loss, file)
+with open('./greedyTAS/m(2500)_path_epoch100-subnet.pkl', 'wb') as file:
+    pickle.dump(results_no_duplicates, file)
 
 print("Data saved successfully.")
