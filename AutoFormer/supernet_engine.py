@@ -137,8 +137,8 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
         data_iter = iter(metric_logger.log_every(data_loader, print_freq, header))
         
-        # Validation data iterator for selecting top-k paths
-        validation_data_iter = iter(validation_data_loader)
+        # # Validation data iterator for selecting top-k paths
+        # validation_data_iter = iter(validation_data_loader)
 
         # for iter_num in range(total_iters):  # T/k번 반복
         sampled_paths = []
@@ -176,34 +176,32 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                 model_module = unwrap_model(model)
                 model_module.set_sample_config(config=config)
 
-                # Validation 데이터에서 배치 하나 가져오기 (즉시 가져와 사용)
-                try:
-                    val_samples, val_targets = next(validation_data_iter)
-                except StopIteration:
-                    # Validation 데이터가 끝났으면 다시 처음부터 시작
-                    validation_data_iter = iter(validation_data_loader)
-                    val_samples, val_targets = next(validation_data_iter)
+                # Evaluate the model on the entire validation dataset
+                val_loss_total = 0
+                num_batches = 0
                 
-                # val_samples와 val_targets의 크기를 출력
-                # print(f"val_samples shape: {val_samples.shape}")
-                # print(f"val_targets shape: {val_targets.shape}")
-                
-                val_samples = val_samples.to(device, non_blocking=True)
-                val_targets = val_targets.to(device, non_blocking=True)
+                for val_samples, val_targets in validation_data_loader:
+                    val_samples = val_samples.to(device, non_blocking=True)
+                    val_targets = val_targets.to(device, non_blocking=True)
 
-                if mixup_fn is not None:
-                    val_samples, val_targets = mixup_fn(val_samples, val_targets)
+                    if mixup_fn is not None:
+                        val_samples, val_targets = mixup_fn(val_samples, val_targets)
 
-                if amp:
-                    with torch.cuda.amp.autocast():
+                    if amp:
+                        with torch.cuda.amp.autocast():
+                            val_outputs = model(val_samples)
+                            val_loss = criterion(val_outputs, val_targets)
+                    else:
                         val_outputs = model(val_samples)
                         val_loss = criterion(val_outputs, val_targets)
-                else:
-                    val_outputs = model(val_samples)
-                    val_loss = criterion(val_outputs, val_targets)
-                
-                # 손실 및 설정 저장
-                losses.append((val_loss.item(), config))
+
+                    # 각 배치의 손실을 더함
+                    val_loss_total += val_loss.item()
+                    num_batches += 1
+
+                # 전체 배치의 평균 손실을 저장
+                val_loss_avg = val_loss_total / num_batches
+                losses.append((val_loss_avg, config))
 
                 # GPU 메모리 해제
                 # del val_outputs

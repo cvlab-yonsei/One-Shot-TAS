@@ -25,10 +25,10 @@ import sys
 import warnings
 
 # UserWarning 무시
-warnings.filterwarnings("ignore", category=UserWarning)
+# warnings.filterwarnings("ignore", category=UserWarning)
 
-sys.stdout = open('./greedyTAS/greedyTAS-epoch20-top-k.log', 'w')
-sys.stderr = sys.stdout
+# sys.stdout = open('./greedyTAS/greedyTAS-epoch20-top-k.log', 'w')
+# sys.stderr = sys.stdout
 
 
 def get_args_parser():
@@ -186,6 +186,7 @@ def get_args_parser():
                         help='number of distributed processes')
     # parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
     parser.add_argument('--dist_url', default='tcp://localhost:2041', help='url used to set up distributed training')
+    parser.add_argument('--log-file-path', default='', type=str, help='Path to the log file')
 
     parser.add_argument('--amp', action='store_true')
     parser.add_argument('--no-amp', action='store_false', dest='amp')
@@ -195,9 +196,15 @@ def get_args_parser():
     return parser
 
 def main(args):
+    warnings.filterwarnings("ignore", category=UserWarning)
+
+    sys.stdout = open(args.log_file_path, 'w')
+    sys.stderr = sys.stdout
 
     utils.init_distributed_mode(args)
     update_config_from_file(args.cfg)
+    
+    print(int(2 * args.batch_size))
 
     print(args)
     args_text = yaml.safe_dump(args.__dict__, default_flow_style=False)
@@ -255,8 +262,8 @@ def main(args):
     )
 
     data_loader_val = torch.utils.data.DataLoader(
-        dataset_val, batch_size=1024,
-        # dataset_val, batch_size=int(2 * args.batch_size),
+        # dataset_val, batch_size=1024,
+        dataset_val, batch_size=int(2 * args.batch_size),
         sampler=sampler_val, num_workers=args.num_workers,
         pin_memory=args.pin_mem, 
         drop_last=True, persistent_workers=True
