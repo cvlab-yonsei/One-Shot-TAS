@@ -191,7 +191,10 @@ def get_args_parser():
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
-    parser.add_argument('--dist_url', default='tcp://localhost:2040', help='url used to set up distributed training')
+    parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
+    parser.add_argument('--save_checkpoint_path', default='', help='save checkpoint to the path')
+    parser.add_argument('--save_log_path', default='', help='save log file to the path')
+    parser.add_argument('--interval', default=1, type=int, help='interval of reusing top-k subnet searched by the sn indicator')
 
     parser.add_argument('--amp', action='store_true')
     parser.add_argument('--no-amp', action='store_false', dest='amp')

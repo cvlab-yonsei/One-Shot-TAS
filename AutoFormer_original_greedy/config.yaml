@@ -1,4 +1,4 @@
-aa: rand-m9-mstd0.5-inc1 #rand-m9-mstd0.5-inc1 #m9-n2-mstd0.5-inc1 (random augment) (autoaug x)
+aa: rand-m9-mstd0.5-inc1
 amp: true
 batch_size: 64
 cfg: ./experiments/supernet/supernet-T.yaml
@@ -8,7 +8,7 @@ color_jitter: 0.4
 config_list_path: ''
 cooldown_epochs: 10
 crossover_num: 25
-cutmix: 1.0 # 0.0
+cutmix: 1.0
 cutmix_minmax: null
 data_path: /data
 data_set: IMNET
@@ -25,10 +25,10 @@ drop_path: 0.1
 epochs: 30
 eval: false
 gp: true
-gpu: 1
+gpu: 0
 inat_category: name
 input_size: 224
-log_file_path: ./log/search_sn_400_bottom_10M.log
+log_file_path: ./log/search_sn_not_original_500-top(data_aug)_6M.log
 lr: 0.0005
 lr_noise: null
 lr_noise_pct: 0.67
@@ -38,11 +38,11 @@ m_prob: 0.2
 max_epochs: 20
 max_relative_position: 14
 min_lr: 1.0e-05
-min_param_limits: 9.0
-mixup: 0.8 # 0.0
-mixup_mode: batch # x
-mixup_prob: 1.0 
-mixup_switch_prob: 0.5 # x
+min_param_limits: 5.0
+mixup: 0.8
+mixup_mode: batch
+mixup_prob: 1.0
+mixup_switch_prob: 0.5
 model: ''
 model_ema: false
 model_ema_decay: 0.99996
@@ -56,21 +56,21 @@ opt: adamw
 opt_betas: null
 opt_eps: 1.0e-08
 output_dir: ''
-param_limits: 10.0
+param_limits: 6.0
 patch_size: 16
 patience_epochs: 10
 pin_mem: true
 platform: pai
 population_num: 50
 post_norm: false
-rank: 1
+rank: 0
 recount: 1
 relative_position: true
 remode: pixel
 repeated_aug: true
 reprob: 0.25
 resplit: false
-resume: /OUTPUT_PATH/checkpoint-sn-400-bottom-25.pth
+resume: /OUTPUT_PATH/checkpoint-sn-not-original-0-prenas-aug25.pth
 rpe_type: bias
 s_prob: 0.4
 scale: false
@@ -83,5 +83,5 @@ teacher_model: ''
 train_interpolation: bicubic
 warmup_epochs: 5
 warmup_lr: 1.0e-06
-weight_decay: 0.05 # 0.02
+weight_decay: 0.05
 world_size: 8
