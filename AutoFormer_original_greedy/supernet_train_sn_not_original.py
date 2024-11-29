@@ -26,9 +26,9 @@ import warnings
 # UserWarning 무시
 warnings.filterwarnings("ignore", category=UserWarning)
 
-sys.stdout = open('./log/supernet_greedy_spectral_norm_400ep_not_sn(original).log', 'w')
+sys.stdout = open('./log/supernet_greedy_spectral_norm_0ep_not_sn(original)_prenas_aug.log', 'w')
 sys.stderr = sys.stdout
-
+ 
 
 def get_args_parser():
     parser = argparse.ArgumentParser('AutoFormer training and evaluation script', add_help=False)
@@ -106,7 +106,7 @@ def get_args_parser():
 
     parser.add_argument('--decay-epochs', type=float, default=30, metavar='N',
                         help='epoch interval to decay LR')
-    parser.add_argument('--warmup-epochs', type=int, default=5, metavar='N',
+    parser.add_argument('--warmup-epochs', type=int, default=20, metavar='N',
                         help='epochs to warmup LR, if scheduler supports')
     parser.add_argument('--cooldown-epochs', type=int, default=10, metavar='N',
                         help='epochs to cooldown LR at min_lr, after cyclic schedule ends')
@@ -191,7 +191,7 @@ def get_args_parser():
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
-    parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
+    parser.add_argument('--dist_url', default='tcp://localhost:2040', help='url used to set up distributed training')
 
     parser.add_argument('--amp', action='store_true')
     parser.add_argument('--no-amp', action='store_false', dest='amp')
@@ -387,7 +387,7 @@ def main(args):
         lr_scheduler.step(epoch)
         if args.output_dir:
             # checkpoint_paths = [output_dir / 'checkpoint.pth']
-            checkpoint_paths = [output_dir / ('checkpoint-sn-not-original-400-' + str((epoch+1)//20) + '.pth')]
+            checkpoint_paths = [output_dir / ('checkpoint-sn-not-original-0-prenas-aug' + str((epoch+1)//20) + '.pth')]
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({
                     'model': model_without_ddp.state_dict(),
