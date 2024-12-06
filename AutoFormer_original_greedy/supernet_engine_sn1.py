@@ -12,6 +12,8 @@ import time
 import torch.nn as nn
 from typing import List, Dict
 
+import pickle
+
 def sample_config_from_topk(model: torch.nn.Module, choices: Dict, m: int, k: int, device: torch.device, 
                             candidate_pool: List = None, pool_sampling_prob: float = 0.0) -> List:
     model.eval()
@@ -247,6 +249,14 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                 config_list = candidate_pool
                 
             print("config_list[:5] : ", config_list[:5])
+            
+
+        # candidate_pool을 pkl 파일로 저장
+        with open('candidate_pool_460.pkl', 'wb') as f:
+            pickle.dump(candidate_pool, f)
+
+        print("candidate_pool이 candidate_pool.pkl 파일로 저장되었습니다.")
+
             
         
 
