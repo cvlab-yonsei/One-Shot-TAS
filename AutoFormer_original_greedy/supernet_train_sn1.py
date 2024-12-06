@@ -376,8 +376,18 @@ def main(args):
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
+        
+        pool_sampling_prob = 0.0
+        # pool_sampling_prob = min(0.8, epoch / args.epochs)
+        if epoch < 400:
+            pool_sampling_prob = 0
+        elif 400 <= epoch <= args.epochs:
+            pool_sampling_prob = min(0.8, (epoch - 400) / 100)
+        else:
+            pool_sampling_prob = 0.8
             
-        pool_sampling_prob = min(0.8, epoch / args.epochs)
+        print("pool_sampling_prob : ", pool_sampling_prob)
+
 
         train_stats = train_one_epoch(
             model, criterion, data_loader_train,

@@ -235,8 +235,8 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         print(model_module.get_sampled_params_numel(config))
     else:
         if interval == 1:
-            # config_list = sample_config_from_topk(model, choices, m, k, device, candidate_pool, pool_sampling_prob) # 나중에 400ep으로 이거 0.8로 실험 한번 더
-            config_list = sample_config_from_topk(model, choices, m, k, device, candidate_pool, 0) # 이렇게 실험해버린듯(첫 400ep)
+            config_list = sample_config_from_topk(model, choices, m, k, device, candidate_pool, pool_sampling_prob) # 나중에 400ep으로 이거 0.8로 실험 한번 더
+            # config_list = sample_config_from_topk(model, choices, m, k, device, candidate_pool, 0) # 이렇게 실험해버린듯(첫 400ep)
             candidate_pool[:] = [config for config in config_list] # update candidate pool
         else:
             if not candidate_pool or epoch%interval == 0:
