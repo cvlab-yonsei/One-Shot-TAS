@@ -92,7 +92,6 @@ class EvolutionSearcher(object):
         sampled_config['num_heads'] = num_heads
         sampled_config['embed_dim'] = [embed_dim]*depth
         n_parameters = self.model_without_ddp.get_sampled_params_numel(sampled_config)
-        print("n_parameters : ", n_parameters)
         info['params'] =  n_parameters / 10.**6
 
         if info['params'] > self.parameters_limits:
@@ -176,31 +175,44 @@ class EvolutionSearcher(object):
         if not isinstance(loaded_candidates, list):
             raise ValueError(f"Loaded data from {pkl_path} is not a list. Please check the .pkl file format.")
         
-        # Filter the candidates using is_legal logic
-        self.candidates = []
+        def stack_loaded_cand(candidates, *, batchsize=10):
+            """
+            Similar to stack_random_cand, but uses pre-loaded candidates instead of randomly generated ones.
+            """
+            idx = 0
+            while True:
+                cands = candidates[idx:idx + batchsize]
+                idx += batchsize
+                if idx >= len(candidates):  # If we've gone through all candidates, start from the beginning
+                    idx = 0
+                for cand_dict in cands:
+                    # Convert dict to tuple format expected by is_legal
+                    depth = cand_dict['layer_num']
+                    mlp_ratio = cand_dict['mlp_ratio']
+                    num_heads = cand_dict['num_heads']
+                    embed_dim = cand_dict['embed_dim'][0]  # Assume embed_dim is same for all layers, so use the first one
+                    cand_tuple = (depth, *mlp_ratio, *num_heads, embed_dim)
+                    
+                    if cand_tuple not in self.vis_dict:
+                        self.vis_dict[cand_tuple] = {}
+                    info = self.vis_dict[cand_tuple]
+                    
+                    yield cand_tuple, cand_dict
+
+        print('Starting to load candidates from loaded .pkl file...')
         
-        print("len(loaded_candidates) : ", len(loaded_candidates))
-        for cand_dict in loaded_candidates:
-            # Convert the dict to tuple format expected by is_legal
-            depth = cand_dict['layer_num']
-            mlp_ratio = cand_dict['mlp_ratio']
-            num_heads = cand_dict['num_heads']
-            embed_dim = cand_dict['embed_dim'][0]  # Assume embed_dim is same for all layers, so use the first one
-            cand_tuple = (depth, *mlp_ratio, *num_heads, embed_dim)
-            
-            n_parameters = self.model_without_ddp.get_sampled_params_numel(cand_dict)
-            print("n_parameters : ", n_parameters)
-            
-            # if self.is_legal(cand_tuple):  # Check if the candidate satisfies the constraints
-            #     self.candidates.append(cand_dict)
-            #     print('Added candidate {}/{}'.format(len(self.candidates), num))
-            
-            # if len(self.candidates) >= num:
-            #     break
+        cand_iter = stack_loaded_cand(loaded_candidates)  # Create an iterator for loaded candidates
         
-        # Print the total number of candidates loaded
-        print('Loaded {} candidates from {}.'.format(len(self.candidates), pkl_path))
-        print('candidates_num = {}'.format(len(self.candidates)))
+        while len(self.candidates) < num:
+            cand_tuple, cand_dict = next(cand_iter)
+            
+            if not self.is_legal(cand_tuple):
+                continue
+            
+            self.candidates.append(cand_dict)
+            print('loaded {}/{}'.format(len(self.candidates), num))
+        
+        print('loaded_num = {}'.format(len(self.candidates)))
 
     def get_mutation(self, k, mutation_num, m_prob, s_prob):
         assert k in self.keep_top_k
@@ -302,7 +314,7 @@ class EvolutionSearcher(object):
         # self.get_random(self.population_num) # original
         
         # get candidate pool from training process
-        self.load_candidates_from_pkl('candidate_pool_460.pkl', self.population_num)
+        self.load_candidates_from_pkl('candidate_pool_460_no_duplicate.pkl', self.population_num)
         
         ######
 
