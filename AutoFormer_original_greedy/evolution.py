@@ -154,6 +154,33 @@ class EvolutionSearcher(object):
             self.candidates.append(cand)
             print('random {}/{}'.format(len(self.candidates), num))
         print('random_num = {}'.format(len(self.candidates)))
+        
+        
+    def load_candidates_from_pkl(self, pkl_path, num):
+        """
+        Load candidate data from a .pkl file and set self.candidates to the first `num` candidates.
+
+        Args:
+            pkl_path (str): Path to the .pkl file containing candidate data.
+            num (int): Number of candidates to load and set for self.candidates.
+        """
+        print('Loading candidates from .pkl file...')
+        
+        # Load the .pkl file
+        with open(pkl_path, 'rb') as f:
+            loaded_candidates = pickle.load(f)
+        
+        # Check if the loaded candidates are in a valid format (list, array, etc.)
+        if not isinstance(loaded_candidates, list):
+            raise ValueError(f"Loaded data from {pkl_path} is not a list. Please check the .pkl file format.")
+        
+        # Take only the first 'num' candidates
+        self.candidates = loaded_candidates[:num]
+        
+        # Print the number of candidates loaded
+        print('Loaded {} candidates from {}.'.format(len(self.candidates), pkl_path))
+        print('candidates_num = {}'.format(len(self.candidates)))
+        
 
     def get_mutation(self, k, mutation_num, m_prob, s_prob):
         assert k in self.keep_top_k
@@ -251,7 +278,13 @@ class EvolutionSearcher(object):
 
         # self.load_checkpoint()
 
-        self.get_random(self.population_num)
+        #####
+        # self.get_random(self.population_num) # original
+        
+        # get candidate pool from training process
+        self.load_candidates_from_pkl('candidate_pool_460.pkl', self.population_num)
+        
+        ######
 
         while self.epoch < self.max_epochs:
             print('epoch = {}'.format(self.epoch))
