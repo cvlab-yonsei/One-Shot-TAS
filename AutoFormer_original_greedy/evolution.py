@@ -158,7 +158,8 @@ class EvolutionSearcher(object):
         
     def load_candidates_from_pkl(self, pkl_path, num):
         """
-        Load candidate data from a .pkl file and set self.candidates to the first `num` candidates.
+        Load candidate data from a .pkl file and set self.candidates to the first `num` candidates 
+        that satisfy the parameter limit constraints using the is_legal method.
 
         Args:
             pkl_path (str): Path to the .pkl file containing candidate data.
@@ -174,13 +175,26 @@ class EvolutionSearcher(object):
         if not isinstance(loaded_candidates, list):
             raise ValueError(f"Loaded data from {pkl_path} is not a list. Please check the .pkl file format.")
         
-        # Take only the first 'num' candidates
-        self.candidates = loaded_candidates[:num]
+        # Filter the candidates using is_legal logic
+        self.candidates = []
+        for cand_dict in loaded_candidates:
+            # Convert the dict to tuple format expected by is_legal
+            depth = cand_dict['layer_num']
+            mlp_ratio = cand_dict['mlp_ratio']
+            num_heads = cand_dict['num_heads']
+            embed_dim = cand_dict['embed_dim'][0]  # Assume embed_dim is same for all layers, so use the first one
+            cand_tuple = (depth, *mlp_ratio, *num_heads, embed_dim)
+            
+            if self.is_legal(cand_tuple):  # Check if the candidate satisfies the constraints
+                self.candidates.append(cand_dict)
+                print('Added candidate {}/{}'.format(len(self.candidates), num))
+            
+            if len(self.candidates) >= num:
+                break
         
-        # Print the number of candidates loaded
+        # Print the total number of candidates loaded
         print('Loaded {} candidates from {}.'.format(len(self.candidates), pkl_path))
         print('candidates_num = {}'.format(len(self.candidates)))
-        
 
     def get_mutation(self, k, mutation_num, m_prob, s_prob):
         assert k in self.keep_top_k
