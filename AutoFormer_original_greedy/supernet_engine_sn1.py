@@ -56,6 +56,7 @@ def sample_config_from_topk(model: torch.nn.Module, choices: Dict, m: int, k: in
 
     # Sample m paths
     with torch.no_grad():
+        seen_configs = set()  # 중복 확인을 위한 집합 추가
         while len(sampled_paths) < m:
             if candidate_pool and random.random() <= pool_sampling_prob:
                 config = random.choice(candidate_pool)
@@ -63,11 +64,14 @@ def sample_config_from_topk(model: torch.nn.Module, choices: Dict, m: int, k: in
                 config = sample_configs(choices)
             param_count = model_module.get_sampled_params_numel(config)
             group = get_group(param_count)
-            # if config not in sampled_paths:
-                # sampled_paths.append(config)
-                # groups[group].append(config)
-            sampled_paths.append(config)
-            groups[group].append(config)
+            
+            # config를 튜플 형태로 변환하여 중복 확인 (딕셔너리는 해시 불가능하므로 튜플로 변환)
+            config_tuple = tuple((k, tuple(v) if isinstance(v, list) else v) for k, v in sorted(config.items()))
+            
+            if config_tuple not in seen_configs:  # 중복되지 않은 경우에만 추가
+                sampled_paths.append(config)
+                groups[group].append(config)
+                seen_configs.add(config_tuple)  # 중복 확인 집합에 추가
 
         losses = []
         for config in sampled_paths:
@@ -102,7 +106,7 @@ def sample_config_from_topk(model: torch.nn.Module, choices: Dict, m: int, k: in
     if len(top_k_paths) < k:
         remaining_items.sort(key=lambda x: x[0], reverse=True)
         top_k_paths.extend(remaining_items[:k - len(top_k_paths)])
-    random.shuffle(top_k_paths)
+    random.shuffle(top_k_paths) # 아거 지워서도 실험해보자.
 
     # top_k_paths에서 config만 반환
     return [config for _, config, _, _ in top_k_paths]
