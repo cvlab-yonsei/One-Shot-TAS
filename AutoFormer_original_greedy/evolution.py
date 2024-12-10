@@ -311,10 +311,10 @@ class EvolutionSearcher(object):
         # self.load_checkpoint()
 
         #####
-        # self.get_random(self.population_num) # original
+        self.get_random(self.population_num) # original
         
         # get candidate pool from training process
-        self.load_candidates_from_pkl('candidate_pool_460_no_duplicate.pkl', self.population_num)
+        # self.load_candidates_from_pkl('candidate_pool_460_no_duplicate.pkl', self.population_num)
         
         ######
 

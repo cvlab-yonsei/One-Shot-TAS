@@ -25,7 +25,7 @@ drop_path: 0.1
 epochs: 30
 eval: false
 gp: true
-gpu: 3
+gpu: 0
 inat_category: name
 input_size: 224
 log_file_path: ./log/search_sn_not_original_460-interval-1-top(data_aug_pool_init_evolution)_6M.log
@@ -63,7 +63,7 @@ pin_mem: true
 platform: pai
 population_num: 50
 post_norm: false
-rank: 3
+rank: 0
 recount: 1
 relative_position: true
 remode: pixel
