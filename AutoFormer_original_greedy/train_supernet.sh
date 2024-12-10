@@ -104,7 +104,7 @@
 python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution.py --data-path '/data' --gp \
 --change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint-sn-460-interval-1-top(data_aug_pool_no_duplicate)-25.pth' \
 --min-param-limits 5 --param-limits 6 \
---log-file-path './log/search_sn_not_original_460-interval-1-top(data_aug_pool_init_evolution)_6M.log'
+--log-file-path './log/search_sn_not_original_460-interval-1-top(data_aug_pool_init_random)_6M.log'
 
 # python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution.py --data-path '/data' --gp \
 # --change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint-sn-480-interval-1-top(data_aug)-25.pth' \
