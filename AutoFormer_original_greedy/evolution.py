@@ -209,7 +209,7 @@ class EvolutionSearcher(object):
             if not self.is_legal(cand_tuple):
                 continue
             
-            self.candidates.append(cand_dict)
+            self.candidates.append(cand_tuple)
             print('loaded {}/{}'.format(len(self.candidates), num))
         
         print('loaded_num = {}'.format(len(self.candidates)))
