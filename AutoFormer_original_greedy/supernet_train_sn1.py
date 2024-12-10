@@ -377,14 +377,15 @@ def main(args):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
         
-        pool_sampling_prob = 0.0
-        # pool_sampling_prob = min(0.8, epoch / args.epochs)
-        if epoch < 460:
-            pool_sampling_prob = 0
-        elif 460 <= epoch <= args.epochs:
-            pool_sampling_prob = min(0.8, (epoch - 460) / 40)
-        else:
-            pool_sampling_prob = 0.8
+        # pool_sampling_prob = 0.0
+        pool_sampling_prob = 0.8
+        # # pool_sampling_prob = min(0.8, epoch / args.epochs)
+        # if epoch < 460:
+        #     pool_sampling_prob = 0
+        # elif 460 <= epoch <= args.epochs:
+        #     pool_sampling_prob = min(0.8, (epoch - 460) / 40)
+        # else:
+        #     pool_sampling_prob = 0.8
             
         print("pool_sampling_prob : ", pool_sampling_prob)
 
