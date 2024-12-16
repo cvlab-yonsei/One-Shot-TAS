@@ -14,7 +14,7 @@ from timm.scheduler import create_scheduler
 from timm.optim import create_optimizer
 from timm.utils import NativeScaler
 from lib.datasets import build_dataset
-from supernet_engine_sn1 import train_one_epoch, evaluate
+from supernet_engine_MLP import train_one_epoch, evaluate
 from lib.samplers import RASampler
 from lib import utils
 from lib.config import cfg, update_config_from_file
