@@ -40,7 +40,7 @@ def sample_config_from_topk(model: torch.nn.Module, choices: Dict, m: int, k: in
             if 'weight_mask' not in name:
                 param.mul_(signs[name])
 
-    # DSS 점수 계산
+    # MLP 점수 계산
     signs = linearize(model_module)
     supernet_indicators = {}
     total = 0
