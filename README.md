@@ -1,4 +1,4 @@
-# One-Shot-TAS
+# One-Shot-TAS 
 
 ## How to Start
 
@@ -33,6 +33,7 @@ pip install pillow==6.1.0
 `pip install torch==1.8.1+cu111 torchvision==0.9.1+cu111 torchaudio==0.8.1 -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html`
 
 ```
+
 
 ## Data Preparation 
 You need to first download the [ImageNet-2012](http://www.image-net.org/) to the folder `./data/imagenet` and move the validation set to the subfolder `./data/imagenet/val`. To move the validation set, you cloud use the following script: <https://raw.githubusercontent.com/soumith/imagenetloader.torch/master/valprep.sh>
