@@ -380,12 +380,12 @@ def main(args):
         # pool_sampling_prob = 0.0
         pool_sampling_prob = 0.8
         # # pool_sampling_prob = min(0.8, epoch / args.epochs)
-        # if epoch < 460:
-        #     pool_sampling_prob = 0
-        # elif 460 <= epoch <= args.epochs:
-        #     pool_sampling_prob = min(0.8, (epoch - 460) / 40)
-        # else:
-        #     pool_sampling_prob = 0.8
+        if epoch < 300:
+            pool_sampling_prob = 0
+        elif 300 <= epoch <= args.epochs:
+            pool_sampling_prob = min(0.8, (epoch - 300) / 200)
+        else:
+            pool_sampling_prob = 0.8
             
         print("pool_sampling_prob : ", pool_sampling_prob)
 
