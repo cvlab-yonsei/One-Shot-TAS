@@ -311,11 +311,11 @@ class EvolutionSearcher(object):
         # self.load_checkpoint()
 
         #####
-        # self.get_random(self.population_num) # original
+        self.get_random(self.population_num) # original
         
         # get candidate pool from training process
         # self.load_candidates_from_pkl('candidate_pool_460_no_duplicate.pkl', self.population_num)
-        self.load_candidates_from_pkl('candidate_pool_300_no_duplicate(380).pkl', self.population_num)
+        # self.load_candidates_from_pkl('candidate_pool_300_no_duplicate(380).pkl', self.population_num)
         
         ######
 
@@ -517,7 +517,7 @@ def get_args_parser():
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
-    parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
+    parser.add_argument('--dist_url', default='tcp://localhost:2040', help='url used to set up distributed training')
     parser.add_argument('--amp', action='store_true')
     parser.add_argument('--no-amp', action='store_false', dest='amp')
     parser.set_defaults(amp=True)
