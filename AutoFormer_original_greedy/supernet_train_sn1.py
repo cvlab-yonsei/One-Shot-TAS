@@ -82,8 +82,10 @@ def get_args_parser():
                         help='Clip gradient norm (default: None, no clipping)')
     parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
                         help='SGD momentum (default: 0.9)')
-    parser.add_argument('--weight-decay', type=float, default=0.02,
-                        help='weight decay (default: 0.02)')
+    # parser.add_argument('--weight-decay', type=float, default=0.02,
+    #                     help='weight decay (default: 0.02)') # pre-nas
+    parser.add_argument('--weight-decay', type=float, default=0.05,
+                        help='weight decay (default: 0.05)') # original
 
 
     # Learning rate schedule parameters
@@ -146,21 +148,36 @@ def get_args_parser():
                         help='Do not random erase first (clean) augmentation split')
 
     # * Mixup params
-    parser.add_argument('--mixup', type=float, default=0.0,
-                        help='mixup alpha, mixup disabled if 0. (default: 0.0)')
-    parser.add_argument('--cutmix', type=float, default=0.0,
-                        help='cutmix alpha, cutmix disabled if 0. (default: 0.0)')
-    parser.add_argument('--mixup-switch-prob', type=float, default=0.0,
-                        help='Probability of switching to cutmix when both mixup and cutmix enabled (default: 0.0)')
-
+    # original
+    parser.add_argument('--mixup', type=float, default=0.8,
+                        help='mixup alpha, mixup enabled if > 0. (default: 0.8)')
+    parser.add_argument('--cutmix', type=float, default=1.0,
+                        help='cutmix alpha, cutmix enabled if > 0. (default: 1.0)')
     parser.add_argument('--cutmix-minmax', type=float, nargs='+', default=None,
                         help='cutmix min/max ratio, overrides alpha and enables cutmix if set (default: None)')
     parser.add_argument('--mixup-prob', type=float, default=1.0,
                         help='Probability of performing mixup or cutmix when either/both is enabled')
-    # parser.add_argument('--mixup-switch-prob', type=float, default=0.5,
-    #                     help='Probability of switching to cutmix when both mixup and cutmix enabled')
+    parser.add_argument('--mixup-switch-prob', type=float, default=0.5,
+                        help='Probability of switching to cutmix when both mixup and cutmix enabled')
     parser.add_argument('--mixup-mode', type=str, default='batch',
                         help='How to apply mixup/cutmix params. Per "batch", "pair", or "elem"')
+    
+    # pre-nas aug
+    # parser.add_argument('--mixup', type=float, default=0.0,
+    #                     help='mixup alpha, mixup disabled if 0. (default: 0.0)')
+    # parser.add_argument('--cutmix', type=float, default=0.0,
+    #                     help='cutmix alpha, cutmix disabled if 0. (default: 0.0)')
+    # parser.add_argument('--mixup-switch-prob', type=float, default=0.0,
+    #                     help='Probability of switching to cutmix when both mixup and cutmix enabled (default: 0.0)')
+
+    # parser.add_argument('--cutmix-minmax', type=float, nargs='+', default=None,
+    #                     help='cutmix min/max ratio, overrides alpha and enables cutmix if set (default: None)')
+    # parser.add_argument('--mixup-prob', type=float, default=1.0,
+    #                     help='Probability of performing mixup or cutmix when either/both is enabled')
+    # # parser.add_argument('--mixup-switch-prob', type=float, default=0.5,
+    # #                     help='Probability of switching to cutmix when both mixup and cutmix enabled')
+    # parser.add_argument('--mixup-mode', type=str, default='batch',
+    #                     help='How to apply mixup/cutmix params. Per "batch", "pair", or "elem"')
 
     # Dataset parameters
     parser.add_argument('--data-path', default='./data/imagenet/', type=str,
@@ -380,10 +397,10 @@ def main(args):
         # pool_sampling_prob = 0.0
         pool_sampling_prob = 0.8
         # # pool_sampling_prob = min(0.8, epoch / args.epochs)
-        if epoch < 300:
+        if epoch < 460:
             pool_sampling_prob = 0
-        elif 300 <= epoch <= args.epochs:
-            pool_sampling_prob = min(0.8, (epoch - 300) / 200)
+        elif 460 <= epoch <= args.epochs:
+            pool_sampling_prob = min(0.8, (epoch - 460) / 40)
         else:
             pool_sampling_prob = 0.8
             
