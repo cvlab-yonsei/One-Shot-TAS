@@ -301,56 +301,80 @@ class EvolutionSearcher(object):
 
         print('crossover_num = {}'.format(len(res)))
         return res
-
+    
     def search(self):
         print(
-            'population_num = {} select_num = {} mutation_num = {} crossover_num = {} random_num = {} max_epochs = {}'.format(
-                self.population_num, self.select_num, self.mutation_num, self.crossover_num,
-                self.population_num - self.mutation_num - self.crossover_num, self.max_epochs))
-
-        # self.load_checkpoint()
-
-        #####
-        # self.get_random(self.population_num) # original
+        'population_num = {} select_num = {} mutation_num = {} crossover_num = {} random_num = {} max_epochs = {}'.format(
+            self.population_num, self.select_num, self.mutation_num, self.crossover_num,
+            self.population_num - self.mutation_num - self.crossover_num, self.max_epochs))
         
-        # get candidate pool from training process
-        # self.load_candidates_from_pkl('candidate_pool_460_no_duplicate.pkl', self.population_num)
-        self.load_candidates_from_pkl('candidate_pool_460_sn_decay_005_linear08_no_duplicate.pkl', self.population_num)
+        print('Using pre-loaded candidates for evaluation only.')
         
-        ######
+        # Load candidate pool from pkl file
+        self.load_candidates_from_pkl('candidate_pool_460_sn_decay_005_linear08_no_duplicate.pkl', 1050)
+        
+        print('Evaluating loaded candidates...')
+        
+        # Sequential evaluation of loaded candidates
+        for idx, cand in enumerate(self.candidates):
+            print(f'Evaluating candidate {idx + 1}/{len(self.candidates)}...')
+            if self.is_legal(cand):
+                print(f"Candidate {idx + 1} is valid with acc = {self.vis_dict[cand]['acc']}, "
+                    f"test_acc = {self.vis_dict[cand]['test_acc']}, params = {self.vis_dict[cand]['params']}")
+            else:
+                print(f"Candidate {idx + 1} is invalid.")
+        
+        print('Evaluation of all candidates completed.')
 
-        while self.epoch < self.max_epochs:
-            print('epoch = {}'.format(self.epoch))
+    # def search(self):
+    #     print(
+    #         'population_num = {} select_num = {} mutation_num = {} crossover_num = {} random_num = {} max_epochs = {}'.format(
+    #             self.population_num, self.select_num, self.mutation_num, self.crossover_num,
+    #             self.population_num - self.mutation_num - self.crossover_num, self.max_epochs))
 
-            self.memory.append([])
-            for cand in self.candidates:
-                self.memory[-1].append(cand)
+    #     # self.load_checkpoint()
 
-            self.update_top_k(
-                self.candidates, k=self.select_num, key=lambda x: self.vis_dict[x]['acc'])
-            self.update_top_k(
-                self.candidates, k=50, key=lambda x: self.vis_dict[x]['acc'])
+    #     #####
+    #     # self.get_random(self.population_num) # original
+        
+    #     # get candidate pool from training process
+    #     # self.load_candidates_from_pkl('candidate_pool_460_no_duplicate.pkl', self.population_num)
+    #     self.load_candidates_from_pkl('candidate_pool_460_sn_decay_005_linear08_no_duplicate.pkl', self.population_num)
+        
+    #     ######
 
-            print('epoch = {} : top {} result'.format(
-                self.epoch, len(self.keep_top_k[50])))
-            tmp_accuracy = []
-            for i, cand in enumerate(self.keep_top_k[50]):
-                print('No.{} {} Top-1 val acc = {}, Top-1 test acc = {}, params = {}'.format(
-                    i + 1, cand, self.vis_dict[cand]['acc'], self.vis_dict[cand]['test_acc'], self.vis_dict[cand]['params']))
-                tmp_accuracy.append(self.vis_dict[cand]['acc'])
-            self.top_accuracies.append(tmp_accuracy)
+    #     while self.epoch < self.max_epochs:
+    #         print('epoch = {}'.format(self.epoch))
 
-            mutation = self.get_mutation(
-                self.select_num, self.mutation_num, self.m_prob, self.s_prob)
-            crossover = self.get_crossover(self.select_num, self.crossover_num)
+    #         self.memory.append([])
+    #         for cand in self.candidates:
+    #             self.memory[-1].append(cand)
 
-            self.candidates = mutation + crossover
+    #         self.update_top_k(
+    #             self.candidates, k=self.select_num, key=lambda x: self.vis_dict[x]['acc'])
+    #         self.update_top_k(
+    #             self.candidates, k=50, key=lambda x: self.vis_dict[x]['acc'])
 
-            self.get_random(self.population_num)
+    #         print('epoch = {} : top {} result'.format(
+    #             self.epoch, len(self.keep_top_k[50])))
+    #         tmp_accuracy = []
+    #         for i, cand in enumerate(self.keep_top_k[50]):
+    #             print('No.{} {} Top-1 val acc = {}, Top-1 test acc = {}, params = {}'.format(
+    #                 i + 1, cand, self.vis_dict[cand]['acc'], self.vis_dict[cand]['test_acc'], self.vis_dict[cand]['params']))
+    #             tmp_accuracy.append(self.vis_dict[cand]['acc'])
+    #         self.top_accuracies.append(tmp_accuracy)
 
-            self.epoch += 1
+    #         mutation = self.get_mutation(
+    #             self.select_num, self.mutation_num, self.m_prob, self.s_prob)
+    #         crossover = self.get_crossover(self.select_num, self.crossover_num)
 
-            self.save_checkpoint()
+    #         self.candidates = mutation + crossover
+
+    #         self.get_random(self.population_num)
+
+    #         self.epoch += 1
+
+    #         self.save_checkpoint()
 
 def get_args_parser():
     parser = argparse.ArgumentParser('DeiT training and evaluation script', add_help=False)
