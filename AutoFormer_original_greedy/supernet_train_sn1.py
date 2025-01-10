@@ -15,6 +15,7 @@ from timm.optim import create_optimizer
 from timm.utils import NativeScaler
 from lib.datasets import build_dataset
 from supernet_engine_sn1 import train_one_epoch, evaluate
+from supernet_engine_real_original import train_one_epoch_original, evaluate_original
 from lib.samplers import RASampler
 from lib import utils
 from lib.config import cfg, update_config_from_file
@@ -82,10 +83,10 @@ def get_args_parser():
                         help='Clip gradient norm (default: None, no clipping)')
     parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
                         help='SGD momentum (default: 0.9)')
-    # parser.add_argument('--weight-decay', type=float, default=0.02,
-    #                     help='weight decay (default: 0.02)') # pre-nas
-    parser.add_argument('--weight-decay', type=float, default=0.05,
-                        help='weight decay (default: 0.05)') # original
+    parser.add_argument('--weight-decay', type=float, default=0.02,
+                        help='weight decay (default: 0.02)') # pre-nas
+    # parser.add_argument('--weight-decay', type=float, default=0.05,
+    #                     help='weight decay (default: 0.05)') # original
 
 
     # Learning rate schedule parameters
@@ -404,23 +405,42 @@ def main(args):
         else:
             pool_sampling_prob = 0.8
             
-        print("pool_sampling_prob : ", pool_sampling_prob)
+        # if epoch < 400:
+        #     pool_sampling_prob = 0
+        # elif 400 <= epoch <= args.epochs:
+        #     pool_sampling_prob = min(0.8, (epoch - 400) / 100)
+        # else:
+        #     pool_sampling_prob = 0.8
+            
 
-
-        train_stats = train_one_epoch(
-            model, criterion, data_loader_train,
-            optimizer, device, epoch, loss_scaler,
-            args.clip_grad, model_ema, mixup_fn,
-            amp=args.amp, teacher_model=teacher_model,
-            teach_loss=teacher_loss,
-            choices=choices, mode = args.mode, retrain_config=retrain_config,
-            candidate_pool=candidate_pool, 
-            # validation_data_loader=data_loader_val, 
-            pool_sampling_prob=pool_sampling_prob,  # Pass candidate_pool and sampling probability
-            m=2500,  # Number of sampled paths
-            k=1250,    # Number of top paths to train on
-            interval=args.interval
-        )
+        if epoch < 400:
+            train_stats = train_one_epoch_original(
+                model, criterion, data_loader_train,
+                optimizer, device, epoch, loss_scaler,
+                args.clip_grad, model_ema, mixup_fn,
+                amp=args.amp, teacher_model=teacher_model,
+                teach_loss=teacher_loss,
+                choices=choices, mode = args.mode, retrain_config=retrain_config,
+            )
+            
+        else:
+            print("pool_sampling_prob : ", pool_sampling_prob)
+            
+            train_stats = train_one_epoch(
+                model, criterion, data_loader_train,
+                optimizer, device, epoch, loss_scaler,
+                args.clip_grad, model_ema, mixup_fn,
+                amp=args.amp, teacher_model=teacher_model,
+                teach_loss=teacher_loss,
+                choices=choices, mode = args.mode, retrain_config=retrain_config,
+                candidate_pool=candidate_pool, 
+                # validation_data_loader=data_loader_val, 
+                pool_sampling_prob=pool_sampling_prob,  # Pass candidate_pool and sampling probability
+                m=2500,  # Number of sampled paths
+                k=1250,    # Number of top paths to train on
+                interval=args.interval
+            )
+            
 
         lr_scheduler.step(epoch)
         if args.output_dir:

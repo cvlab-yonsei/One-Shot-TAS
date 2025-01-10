@@ -256,7 +256,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             
 
         # candidate_pool을 pkl 파일로 저장
-        with open('candidate_pool_460_sn_decay_005_linear08_no_duplicate.pkl', 'wb') as f:
+        with open('candidate_pool__fulltraining_400_sn_linear08_no_duplicate.pkl', 'wb') as f:
             pickle.dump(candidate_pool, f)
 
         print("candidate_pool이 candidate_pool.pkl 파일로 저장되었습니다.")
