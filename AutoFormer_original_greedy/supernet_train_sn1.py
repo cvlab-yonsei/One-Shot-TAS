@@ -397,10 +397,10 @@ def main(args):
         # pool_sampling_prob = 0.0
         pool_sampling_prob = 0.8
         # # pool_sampling_prob = min(0.8, epoch / args.epochs)
-        if epoch < 460:
+        if epoch < 400:
             pool_sampling_prob = 0
-        elif 460 <= epoch <= args.epochs:
-            pool_sampling_prob = min(0.8, (epoch - 460) / 40)
+        elif 400 <= epoch <= args.epochs:
+            pool_sampling_prob = min(0.8, (epoch - 400) / 100)
         else:
             pool_sampling_prob = 0.8
             
