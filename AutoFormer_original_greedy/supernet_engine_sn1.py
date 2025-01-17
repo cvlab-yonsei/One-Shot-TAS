@@ -159,7 +159,11 @@ def spectral_norm(layer, device):
             # W_q * W_k^T의 spectral norm 계산
             spectral_norm = torch.svd(W_qkT)[1].max().item()
             
-            return torch.tensor(spectral_norm).to(device)
+            # spectral_norm 값을 랜덤 값으로 변경 (기존 값의 영향 없이 생성)
+            random_spectral_norm = torch.empty(1).uniform_(0 * spectral_norm, 10).item()
+            
+            # return torch.tensor(spectral_norm).to(device)
+            return torch.tensor(random_spectral_norm).to(device)
         else:
             return torch.tensor(0).to(device)
     else:
@@ -256,7 +260,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             
 
         # candidate_pool을 pkl 파일로 저장
-        with open('candidate_pool__fulltraining_400_sn_linear08_no_duplicate.pkl', 'wb') as f:
+        with open('candidate_pool__midtraining_random_400_sn_linear08_no_duplicate.pkl', 'wb') as f:
             pickle.dump(candidate_pool, f)
 
         print("candidate_pool이 candidate_pool.pkl 파일로 저장되었습니다.")
