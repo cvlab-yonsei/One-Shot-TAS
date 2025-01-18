@@ -107,6 +107,15 @@ def sample_config_from_topk(model: torch.nn.Module, choices: Dict, m: int, k: in
         remaining_items.sort(key=lambda x: x[0], reverse=True)
         top_k_paths.extend(remaining_items[:k - len(top_k_paths)])
     random.shuffle(top_k_paths) # 아거 지워서도 실험해보자.
+    
+    ####
+    random_k_paths = []
+    
+    for _ in range(m):
+        random_k_paths.append(sample_configs(choices))
+        
+    return random_k_paths
+    ####
 
     # top_k_paths에서 config만 반환
     return [config for _, config, _, _ in top_k_paths]
