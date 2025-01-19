@@ -18,6 +18,9 @@ def sample_config_from_topk(model: torch.nn.Module, choices: Dict, m: int, k: in
                             candidate_pool: List = None, pool_sampling_prob: float = 0.0) -> List:
     model.eval()
     model_module = unwrap_model(model)
+    
+    # 모델 상태 저장
+    original_state = {name: param.clone() for name, param in model.state_dict().items()}
 
     # DSS 점수를 계산하기 위한 기본 설정
     sampled_config = {
@@ -28,20 +31,20 @@ def sample_config_from_topk(model: torch.nn.Module, choices: Dict, m: int, k: in
     }
     set_arc(model, sampled_config)
 
-    def linearize(net):
-        signs = {}
-        for name, param in net.state_dict().items():
-            signs[name] = torch.sign(param)
-            param.abs_()
-        return signs
+    # def linearize(net):
+    #     signs = {}
+    #     for name, param in net.state_dict().items():
+    #         signs[name] = torch.sign(param)
+    #         param.abs_()
+    #     return signs
 
-    def nonlinearize(net, signs):
-        for name, param in net.state_dict().items():
-            if 'weight_mask' not in name:
-                param.mul_(signs[name])
+    # def nonlinearize(net, signs):
+    #     for name, param in net.state_dict().items():
+    #         if 'weight_mask' not in name:
+    #             param.mul_(signs[name])
 
     # DSS 점수 계산
-    signs = linearize(model_module)
+    # signs = linearize(model_module)
     supernet_indicators = {}
     total = 0
     for layer in model.modules():
@@ -49,10 +52,13 @@ def sample_config_from_topk(model: torch.nn.Module, choices: Dict, m: int, k: in
             layer_metric = spectral_norm(layer, device)
             supernet_indicators[layer._get_name() + '_' + str(total)] = layer_metric
         total += 1
-    nonlinearize(model_module, signs)
+    # nonlinearize(model_module, signs)
 
     sampled_paths = []
     groups = {i: [] for i in range(5)}
+    
+    # 모델 상태 복원
+    model.load_state_dict(original_state)
 
     # Sample m paths
     with torch.no_grad():
@@ -76,7 +82,7 @@ def sample_config_from_topk(model: torch.nn.Module, choices: Dict, m: int, k: in
         losses = []
         for config in sampled_paths:
             set_arc(model, config)
-            signs = linearize(model_module)
+            # signs = linearize(model_module)
             metric_array = []
             total = 0
             attn_layer_total = 0
@@ -90,7 +96,7 @@ def sample_config_from_topk(model: torch.nn.Module, choices: Dict, m: int, k: in
             param_count = model_module.get_sampled_params_numel(config)
             group = get_group(param_count)
             losses.append((sum_dss_score, config, param_count, group))
-            nonlinearize(model_module, signs)
+            # nonlinearize(model_module, signs)
             if len(losses) % 100 == 0:
                 print(f"[{len(losses)} / {m}] Loss: {sum_dss_score}, Config: {config}, Params: {param_count}, Group: {group}")
 
@@ -108,7 +114,11 @@ def sample_config_from_topk(model: torch.nn.Module, choices: Dict, m: int, k: in
         top_k_paths.extend(remaining_items[:k - len(top_k_paths)])
     random.shuffle(top_k_paths) # 아거 지워서도 실험해보자.
     
-    nonlinearize(model_module, signs)
+    # 모델 상태 복원
+    model.load_state_dict(original_state)
+    model.train()
+    
+    # nonlinearize(model_module, signs)
     
     # top_k_paths에서 config만 반환
     return [config for _, config, _, _ in top_k_paths]
