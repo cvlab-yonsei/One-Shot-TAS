@@ -339,7 +339,9 @@ class EvolutionSearcher(object):
         
         # get candidate pool from training process
         # self.load_candidates_from_pkl('candidate_pool_460_no_duplicate.pkl', self.population_num)
-        self.load_candidates_from_pkl('candidate_pool__midtraining_random_400_sn_linear08_no_duplicate.pkl', self.population_num)
+        
+        self.load_candidates_from_pkl('candidate_pool__midtraining-save-init-state_random_400_sn_linear08_no_duplicate.pkl', self.population_num)
+        # self.load_candidates_from_pkl('candidate_pool__midtraining_random_400_sn_linear08_no_duplicate.pkl', self.population_num)
         
         ######
 

@@ -139,15 +139,21 @@ python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train_s
 --save_checkpoint_path 'checkpoint-sn-midtraining4-random-400-interval-1-top(data_aug_pool_no_duplicate_full_0.8_linear)-' --save_log_path './log/supernet_midtraining4-random_greedy_spectral_norm_400ep_interval_1_topk(data_aug_pool_no_duplicate_full_0.8_linear).log' --interval 1
 
 python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train_sn1.py --data-path '/data' --gp \
---change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 420 --warmup-epochs 20 \
+--change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 500 --warmup-epochs 20 \
 --resume '/OUTPUT_PATH/checkpoint-sn-not-original-0-prenas-aug19.pth' --output /OUTPUT_PATH --batch-size 128 \
 --save_checkpoint_path 'checkpoint-sn-midtraining5-save-init-dict-random-400-interval-1-top(data_aug_pool_no_duplicate_full_0.8_linear)-' --save_log_path './log/supernet_midtraining5-save-init-dict-random_greedy_spectral_norm_400ep_interval_1_topk(data_aug_pool_no_duplicate_full_0.8_linear).log' --interval 1
 
-
 python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution.py --data-path '/data' --gp \
---change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint-sn-midtraining4-random-400-interval-1-top(data_aug_pool_no_duplicate_full_0.8_linear)-25.pth' \
+--change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint-sn-midtraining5-save-init-dict-random-400-interval-1-top(data_aug_pool_no_duplicate_full_0.8_linear)-25.pth' \
 --min-param-limits 5 --param-limits 6 \
---log-file-path './log/search_sn_midtraining4-random-400-interval-1-top(data_aug_pool_no_duplicate_real_linear_0.8)_6M.log'
+--log-file-path './log/search_sn_midtraining5-save-init-dict-random-400-interval-1-top(data_aug_pool_no_duplicate_real_linear_0.8)_6M.log'
+
+# python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution2.py --data-path '/data' --gp \
+# --change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint-sn-midtraining4-random-400-interval-1-top(data_aug_pool_no_duplicate_full_0.8_linear)-25.pth' \
+# --min-param-limits 5 --param-limits 6 \
+# --log-file-path './log/search_sn_midtraining4-random-400-interval-1-top(data_aug_pool_no_duplicate_real_linear_0.8)_6M.log'
+
+
 
 # python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution.py --data-path '/data' --gp \
 # --change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint-sn-460-interval-1-top(data_aug_pool_no_duplicate_full_0.8_linear_weight_decay_0.05)-25.pth' \
