@@ -58,7 +58,7 @@ def sample_config_from_topk(model: torch.nn.Module, choices: Dict, m: int, k: in
     groups = {i: [] for i in range(5)}
     
     # 모델 상태 복원
-    model.load_state_dict(original_state)
+    model.load_state_dict(original_state) # 이걸 아래 while문 안에 넣어야되나
 
     # Sample m paths
     with torch.no_grad():

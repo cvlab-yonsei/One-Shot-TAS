@@ -148,6 +148,11 @@ python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution.py --
 --min-param-limits 5 --param-limits 6 \
 --log-file-path './log/search_sn_midtraining5-save-init-dict-random-400-interval-1-top(data_aug_pool_no_duplicate_real_linear_0.8)_6M.log'
 
+python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution.py --data-path '/data' --gp \
+--change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint-sn-midtraining5-save-init-dict-random-400-interval-1-top(data_aug_pool_no_duplicate_full_0.8_linear)-25.pth' \
+--min-param-limits 6 --param-limits 7 \
+--log-file-path './log/search_sn_midtraining5-save-init-dict-random-400-interval-1-top(data_aug_pool_no_duplicate_real_linear_0.8)_7M.log'
+
 # python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution2.py --data-path '/data' --gp \
 # --change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint-sn-midtraining4-random-400-interval-1-top(data_aug_pool_no_duplicate_full_0.8_linear)-25.pth' \
 # --min-param-limits 5 --param-limits 6 \
