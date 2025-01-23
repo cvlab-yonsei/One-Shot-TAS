@@ -20,7 +20,7 @@ def sample_config_from_topk(model: torch.nn.Module, choices: Dict, m: int, k: in
     model_module = unwrap_model(model)
     
     # 모델 상태 저장
-    original_state = {name: param.clone() for name, param in model.state_dict().items()}
+    # original_state = {name: param.clone() for name, param in model.state_dict().items()}
 
     # DSS 점수를 계산하기 위한 기본 설정
     sampled_config = {
@@ -58,7 +58,7 @@ def sample_config_from_topk(model: torch.nn.Module, choices: Dict, m: int, k: in
     groups = {i: [] for i in range(5)}
     
     # 모델 상태 복원
-    model.load_state_dict(original_state) # 이걸 아래 while문 안에 넣어야되나
+    # model.load_state_dict(original_state) # 이걸 아래 while문 안에 넣어야되나
 
     # Sample m paths
     with torch.no_grad():
@@ -115,8 +115,8 @@ def sample_config_from_topk(model: torch.nn.Module, choices: Dict, m: int, k: in
     random.shuffle(top_k_paths) # 아거 지워서도 실험해보자.
     
     # 모델 상태 복원
-    model.load_state_dict(original_state)
-    model.train()
+    # model.load_state_dict(original_state)
+    model.train() # 이거 유무 체크
     
     # nonlinearize(model_module, signs)
     
@@ -281,7 +281,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             
 
         # candidate_pool을 pkl 파일로 저장
-        with open('candidate_pool__midtraining6-not-prenas-save-init-state_random_400_sn_linear08_no_duplicate.pkl', 'wb') as f:
+        with open('candidate_pool__midtraining7-prenas-save-init-state-no-trainmode_random_400_sn_linear08_no_duplicate.pkl', 'wb') as f:
             pickle.dump(candidate_pool, f)
 
         print("candidate_pool이 candidate_pool.pkl 파일로 저장되었습니다.")
