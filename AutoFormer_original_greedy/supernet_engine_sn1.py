@@ -31,20 +31,20 @@ def sample_config_from_topk(model: torch.nn.Module, choices: Dict, m: int, k: in
     }
     set_arc(model, sampled_config)
 
-    # def linearize(net):
-    #     signs = {}
-    #     for name, param in net.state_dict().items():
-    #         signs[name] = torch.sign(param)
-    #         param.abs_()
-    #     return signs
+    def linearize(net):
+        signs = {}
+        for name, param in net.state_dict().items():
+            signs[name] = torch.sign(param)
+            param.abs_()
+        return signs
 
-    # def nonlinearize(net, signs):
-    #     for name, param in net.state_dict().items():
-    #         if 'weight_mask' not in name:
-    #             param.mul_(signs[name])
+    def nonlinearize(net, signs):
+        for name, param in net.state_dict().items():
+            if 'weight_mask' not in name:
+                param.mul_(signs[name])
 
     # DSS 점수 계산
-    # signs = linearize(model_module)
+    signs = linearize(model_module)
     supernet_indicators = {}
     total = 0
     for layer in model.modules():
@@ -116,9 +116,9 @@ def sample_config_from_topk(model: torch.nn.Module, choices: Dict, m: int, k: in
     
     # 모델 상태 복원
     # model.load_state_dict(original_state)
-    model.train() # 이거 유무 체크
+    model.train()
     
-    # nonlinearize(model_module, signs)
+    nonlinearize(model_module, signs)
     
     # top_k_paths에서 config만 반환
     return [config for _, config, _, _ in top_k_paths]
@@ -281,7 +281,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             
 
         # candidate_pool을 pkl 파일로 저장
-        with open('candidate_pool__midtraining7-prenas-save-init-state-no-trainmode_random_400_sn_linear08_no_duplicate.pkl', 'wb') as f:
+        with open('candidate_pool__midtraining6-not-prenas-save-init-state_random_400_sn_linear08_no_duplicate.pkl', 'wb') as f:
             pickle.dump(candidate_pool, f)
 
         print("candidate_pool이 candidate_pool.pkl 파일로 저장되었습니다.")
