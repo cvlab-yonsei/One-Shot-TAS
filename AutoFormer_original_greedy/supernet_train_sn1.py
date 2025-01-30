@@ -191,7 +191,7 @@ def get_args_parser():
 
     parser.add_argument('--amp', action='store_true')
     parser.add_argument('--no-amp', action='store_false', dest='amp')
-    parser.set_defaults(amp=True)
+    parser.set_defaults(amp=False) # True인데 False로 바꿈..
 
 
     return parser
@@ -373,10 +373,10 @@ def main(args):
         # pool_sampling_prob = 0.0
         pool_sampling_prob = 0.8
         # # pool_sampling_prob = min(0.8, epoch / args.epochs)
-        if epoch < 400:
+        if epoch < 440:
             pool_sampling_prob = 0
-        elif 400 <= epoch <= args.epochs:
-            pool_sampling_prob = min(0.8, (epoch - 400) / 100)
+        elif 440 <= epoch <= args.epochs:
+            pool_sampling_prob = min(0.8, (epoch - 440) / 60)
         else:
             pool_sampling_prob = 0.8
             
@@ -388,7 +388,7 @@ def main(args):
         #     pool_sampling_prob = 0.8
             
 
-        if epoch < 400:
+        if epoch < 440:
             train_stats = train_one_epoch_original(
                 model, criterion, data_loader_train,
                 optimizer, device, epoch, loss_scaler,
@@ -421,7 +421,7 @@ def main(args):
         if args.output_dir:
             # checkpoint_paths = [output_dir / 'checkpoint.pth']
             # checkpoint_paths = [output_dir / ('checkpoint-sn-400-interval-5-top-' + str((epoch+1)//20) + '.pth')]
-            checkpoint_paths = [output_dir / (args.save_checkpoint_path + str((epoch+1)//20) + '.pth')]
+            checkpoint_paths = [output_dir / (args.save_checkpoint_path + str((epoch+1)) + '.pth')]
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({
                     'model': model_without_ddp.state_dict(),

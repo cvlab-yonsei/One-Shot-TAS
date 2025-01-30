@@ -186,15 +186,29 @@
 # --min-param-limits 6 --param-limits 7 \
 # --log-file-path './log/search_sn_midtraining5-save-init-dict-random-400-interval-1-top(data_aug_pool_no_duplicate_real_linear_0.8)_7M.log'
 
+# python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train_sn1.py --data-path '/data' --gp \
+# --change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 500 --warmup-epochs 20 \
+# --resume '/OUTPUT_PATH/checkpoint-original-19.pth' --output /OUTPUT_PATH --batch-size 128 \
+# --save_checkpoint_path 'checkpoint-sn-midtraining9-no-train-random-400-m400k200-1batch5config-interval-1-top(original_pool_no_duplicate_full_0.8_linear)-' --save_log_path './log/supernet_midtraining9-no-train-random-400-m400k200-1batch5config-interval-1-top(original_pool_no_duplicate_full_0.8_linear).log' --interval 1
+
+# python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution.py --data-path '/data' --gp \
+# --change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint-sn-midtraining9-no-train-random-400-m400k200-1batch5config-interval-1-top(original_pool_no_duplicate_full_0.8_linear)-25.pth' \
+# --min-param-limits 5 --param-limits 6 \
+# --log-file-path './log/search_sn_midtraining9-no-train-random-400-m400k200-1batch5config-interval-1-top(original_pool_no_duplicate_full_0.8_linear)_6M.log'
+
 python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train_sn1.py --data-path '/data' --gp \
 --change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 500 --warmup-epochs 20 \
---resume '/OUTPUT_PATH/checkpoint-original-19.pth' --output /OUTPUT_PATH --batch-size 128 \
---save_checkpoint_path 'checkpoint-sn-midtraining9-no-train-random-400-m400k200-1batch5config-interval-1-top(original_pool_no_duplicate_full_0.8_linear)-' --save_log_path './log/supernet_midtraining9-no-train-random-400-m400k200-1batch5config-interval-1-top(original_pool_no_duplicate_full_0.8_linear).log' --interval 1
+--resume '/OUTPUT_PATH/checkpoint-sn-midtraining12-no-train-random-440-m400k200-1batch5config-interval-1-top(original_pool_no_duplicate_full_0.8_linear)-466.pth' --output /OUTPUT_PATH --batch-size 128 \
+--save_checkpoint_path 'checkpoint-sn-midtraining12-no-train-random-440-m400k200-1batch5config-interval-1-top(original_pool_no_duplicate_full_0.8_linear)-' --save_log_path './log/supernet_midtraining12-no-train-random-440-m400k200-1batch5config-interval-1-top(original_pool_no_duplicate_full_0.8_linear).log' --interval 1
 
-python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution.py --data-path '/data' --gp \
---change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint-sn-midtraining9-no-train-random-400-m400k200-1batch5config-interval-1-top(original_pool_no_duplicate_full_0.8_linear)-25.pth' \
---min-param-limits 5 --param-limits 6 \
---log-file-path './log/search_sn_midtraining9-no-train-random-400-m400k200-1batch5config-interval-1-top(original_pool_no_duplicate_full_0.8_linear)_6M.log'
+
+
+
+# python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution.py --data-path '/data' --gp \
+# --change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint-sn-midtraining10-no-train-random-400-m400k200-1batch5config-interval-1-top(original_pool_no_duplicate_full_0.8_linear)-25.pth' \
+# --min-param-limits 5 --param-limits 6 \
+# --log-file-path './log/search_sn_midtraining10-no-train-random-400-m400k200-1batch5config-interval-1-top(original_pool_no_duplicate_full_0.8_linear)_6M.log'
+
 
 # python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution2.py --data-path '/data' --gp \
 # --change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint-sn-midtraining4-random-400-interval-1-top(data_aug_pool_no_duplicate_full_0.8_linear)-25.pth' \
