@@ -12,52 +12,7 @@ import time
 import torch.nn as nn
 from typing import List, Dict
 
-import os
-
 import pickle
-
-# ✅ 모델 가중치가 NaN/Inf인지 검사하는 함수
-def is_model_valid(model):
-    for param in model.parameters():
-        if torch.isnan(param).any() or torch.isinf(param).any():
-            return False  # NaN 또는 Inf 포함된 경우 비정상
-    return True  # 모든 가중치가 정상
-
-# ✅ 간소화된 체크포인트 저장 함수
-def save_checkpoint(model, optimizer, checkpoint_path="last_checkpoint.pth"):
-    if is_model_valid(model):
-        try:
-            utils.save_on_master({
-                'model': model.state_dict(),
-                'optimizer': optimizer.state_dict(),
-            }, checkpoint_path)
-            print(f"✅ Checkpoint saved: {checkpoint_path}")
-
-            # try:
-            #     checkpoint = torch.load("last_checkpoint.pth", map_location="cpu")
-            #     print("✅ Checkpoint successfully loaded!")
-            # except Exception as e:
-            #     print(f"❌ Checkpoint file is corrupted: {e}")
-
-        except Exception as e:
-            print(f"❌ Failed to save checkpoint: {e}")
-    else:
-        print("⚠️ Warning: Model contains NaN/Inf, checkpoint not saved!")
-
-# ✅ 간소화된 체크포인트 로드 함수
-def load_checkpoint(model, optimizer, checkpoint_path="last_checkpoint.pth"):
-    if not os.path.exists(checkpoint_path):
-        print(f"⚠️ Checkpoint not found: {checkpoint_path}, skipping load.")
-        return
-
-    try:
-        checkpoint = torch.load(checkpoint_path, map_location="cpu")  # GPU/CPU 불일치 방지
-        model.load_state_dict(checkpoint['model'])
-        optimizer.load_state_dict(checkpoint['optimizer'])
-        print(f"✅ Checkpoint restored from {checkpoint_path}")
-    except Exception as e:
-        print(f"❌ RuntimeError during checkpoint loading: {e}")
-
 
 def sample_config_from_topk(model: torch.nn.Module, choices: Dict, m: int, k: int, device: torch.device, 
                             candidate_pool: List = None, pool_sampling_prob: float = 0.0) -> List:
@@ -300,7 +255,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
     header = 'Epoch: [{}]'.format(epoch)
-    print_freq = 1 # 원래 10
+    print_freq = 10
     
     config_list = []
     
@@ -311,12 +266,6 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         model_module.set_sample_config(config=config)
         print(model_module.get_sampled_params_numel(config))
     else:
-        # 만약 candidate_pool이 not이면 pkl load.
-        if not candidate_pool and os.path.exists('candidate_pool__midtraining12-no-train-random-440-m400k200-1batch5config-interval-1-top(original_pool_no_duplicate_full_0.8_linear)_467.pkl'):  # 조건이 참일 경우
-            with open('candidate_pool__midtraining12-no-train-random-440-m400k200-1batch5config-interval-1-top(original_pool_no_duplicate_full_0.8_linear)_467.pkl', 'rb') as file:
-                candidate_pool = pickle.load(file)
-                print("candidate_pool__midtraining12 load : ", len(candidate_pool))
-
         if interval == 1:
             config_list = sample_config_from_topk(model, choices, m, k, device, candidate_pool, pool_sampling_prob) # 나중에 400ep으로 이거 0.8로 실험 한번 더
             # config_list = sample_config_from_topk(model, choices, m, k, device, candidate_pool, 0) # 이렇게 실험해버린듯(첫 400ep)
@@ -333,13 +282,13 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             
 
         # candidate_pool을 pkl 파일로 저장
-        with open('candidate_pool__midtraining12-no-train-random-440-m400k200-1batch5config-interval-1-top(original_pool_no_duplicate_full_0.8_linear).pkl', 'wb') as f:
+        with open('candidate_pool__midtraining13-droppath00-not-prenas-save-init-state_random_400_sn_linear08_no_duplicate.pkl', 'wb') as f:
             pickle.dump(candidate_pool, f)
 
         print("candidate_pool이 candidate_pool.pkl 파일로 저장되었습니다.")
 
             
-    last_saved_iter = 0  # 마지막으로 저장한 iteration (중복 저장 방지)  
+        
 
     for iter, (samples, targets) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
         samples = samples.to(device, non_blocking=True)
@@ -347,19 +296,10 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
         # sample random config
         if mode == 'super':
-            optimizer.zero_grad()  # 그래디언트 초기화 ???
-
+            # config = sample_configs(choices=choices)
+            config = config_list[iter%k]
             model_module = unwrap_model(model)
-
-            # # config = sample_configs(choices=choices)
-            # config = config_list[iter%k]
-            # model_module = unwrap_model(model)
-            # model_module.set_sample_config(config=config)
-
-            # 1. 현재 iter에 대한 config + random sampling된 4개의 config 선택
-            current_config = config_list[iter % k]
-            additional_configs = random.sample(config_list, 4)  # config_list에서 4개 랜덤 선택
-            selected_configs = [current_config] + additional_configs  # 총 5개의 config
+            model_module.set_sample_config(config=config)
             
             
         elif mode == 'retrain':
@@ -368,9 +308,6 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             model_module.set_sample_config(config=config)
         if mixup_fn is not None:
             samples, targets = mixup_fn(samples, targets)
-
-        loss = 0
-
         if amp:
             with torch.cuda.amp.autocast():
                 if teacher_model:
@@ -380,77 +317,34 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     outputs = model(samples)
                     loss = 1/2 * criterion(outputs, targets) + 1/2 * teach_loss(outputs, teacher_label.squeeze())
                 else:
-                    # outputs = model(samples)
-					# loss = criterion(outputs, targets)
-					# 2. 각 config에 대해 forward 수행 및 손실 누적
-                    for config in selected_configs:
-                        model_module.set_sample_config(config=config)
-                        with torch.cuda.amp.autocast(enabled=amp):
-                            outputs = model(samples)
-                            loss = criterion(outputs, targets) / len(selected_configs)  # Config별 손실 계산
-                        loss.backward()  # 각 config마다 backward 수행
+                    outputs = model(samples)
+                    loss = criterion(outputs, targets)
         else:
+            outputs = model(samples)
             if teacher_model:
-                outputs = model(samples)
                 with torch.no_grad():
                     teach_output = teacher_model(samples)
                 _, teacher_label = teach_output.topk(1, 1, True, True)
                 loss = 1 / 2 * criterion(outputs, targets) + 1 / 2 * teach_loss(outputs, teacher_label.squeeze())
             else:
-                # outputs = model(samples)
-                # loss = criterion(outputs, targets)
-                # 2. 각 config에 대해 forward 수행 및 손실 누적
-                for config in selected_configs:
-                    model_module.set_sample_config(config=config)
-                    with torch.cuda.amp.autocast(enabled=amp):
-                        outputs = model(samples)
-                        loss = criterion(outputs, targets) / len(selected_configs)
-                    loss.backward()  # 각 config마다 backward 수행
+                loss = criterion(outputs, targets)
 
         loss_value = loss.item()
 
-        # if not math.isfinite(loss_value):
-        #     print("Loss is {}, stopping training".format(loss_value))
-        #     sys.exit(1)
-        
-        # # 손실 값이 NaN 또는 Inf일 경우 해당 배치 건너뛰기
-        # if not math.isfinite(loss_value):
-        #     print(f"Warning: Loss is {loss_value}, skipping batch {iter}")
-        #     optimizer.zero_grad()  # 그래디언트 초기화
-        #     continue  # 현재 배치를 건너뛰고 다음 배치로 이동
-
-        # 손실 값이 NaN 또는 Inf일 경우 해당 배치 스킵 및 체크포인트 복구
         if not math.isfinite(loss_value):
-            print(f"Warning: Loss is {loss_value}, skipping batch {iter}")
+            print("Loss is {}, stopping training".format(loss_value))
+            sys.exit(1)
 
-            # 모델 가중치가 NaN이 되었는지 확인
-            any_nan = any(torch.isnan(p).any() for p in model.parameters())
-            any_inf = any(torch.isinf(p).any() for p in model.parameters())
-
-            if any_nan or any_inf:
-                print(f"Detected NaN/Inf in model parameters at iteration {iter}, reloading last checkpoint...")
-                load_checkpoint(model, optimizer, "last_checkpoint.pth")
-                print("Checkpoint restored. Resuming training.")
-
-            optimizer.zero_grad()  # 그래디언트 초기화
-            continue  # 배치 스킵
-
-        # optimizer.zero_grad() # 호출 뒤로
+        optimizer.zero_grad()
 
         # this attribute is added by timm on one optimizer (adahessian)
         if amp:
-            # # is_second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
-            # # loss_scaler(loss, optimizer, clip_grad=max_norm,
-            # #         parameters=model.parameters(), create_graph=is_second_order)
-            # is_second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
-            # # loss_scaler를 통해 optimizer.step() 호출
-            # loss_scaler(loss, optimizer, clip_grad=max_norm, parameters=model.parameters(), create_graph=is_second_order)
-            optimizer.step()
+            is_second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
+            loss_scaler(loss, optimizer, clip_grad=max_norm,
+                    parameters=model.parameters(), create_graph=is_second_order)
         else:
-            # loss.backward()
+            loss.backward()
             optimizer.step()
-
-        optimizer.zero_grad()
 
         torch.cuda.synchronize()
         if model_ema is not None:
@@ -458,12 +352,6 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
         metric_logger.update(loss=loss_value)
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
-
-        # 매 iteration마다 체크포인트 저장 (이전 저장 iteration과 중복 방지)
-        if iter % 10 == 0 and iter != last_saved_iter:  # 10 iter마다 저장 (조절 가능)
-            save_checkpoint(model, optimizer, "last_checkpoint.pth")
-            last_saved_iter = iter  # 마지막 저장된 iteration 기록
-            print(f"Checkpoint saved at iteration {iter}")
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()

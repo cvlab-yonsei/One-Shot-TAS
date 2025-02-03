@@ -58,8 +58,8 @@ def get_args_parser():
 
     parser.add_argument('--drop', type=float, default=0.0, metavar='PCT',
                         help='Dropout rate (default: 0.)')
-    parser.add_argument('--drop-path', type=float, default=0.1, metavar='PCT',
-                        help='Drop path rate (default: 0.1)')
+    parser.add_argument('--drop-path', type=float, default=0.0, metavar='PCT',
+                        help='Drop path rate (default: 0.0)') # 0.1 -> 0.0
     parser.add_argument('--drop-block', type=float, default=None, metavar='PCT',
                         help='Drop block rate (default: None)')
 
@@ -191,7 +191,7 @@ def get_args_parser():
 
     parser.add_argument('--amp', action='store_true')
     parser.add_argument('--no-amp', action='store_false', dest='amp')
-    parser.set_defaults(amp=False) # True인데 False로 바꿈..
+    parser.set_defaults(amp=True) # True인데 False로 바꿈..
 
 
     return parser
@@ -373,10 +373,10 @@ def main(args):
         # pool_sampling_prob = 0.0
         pool_sampling_prob = 0.8
         # # pool_sampling_prob = min(0.8, epoch / args.epochs)
-        if epoch < 440:
+        if epoch < 400:
             pool_sampling_prob = 0
-        elif 440 <= epoch <= args.epochs:
-            pool_sampling_prob = min(0.8, (epoch - 440) / 60)
+        elif 400 <= epoch <= args.epochs:
+            pool_sampling_prob = min(0.8, (epoch - 400) / 100)
         else:
             pool_sampling_prob = 0.8
             
@@ -388,7 +388,7 @@ def main(args):
         #     pool_sampling_prob = 0.8
             
 
-        if epoch < 440:
+        if epoch < 400:
             train_stats = train_one_epoch_original(
                 model, criterion, data_loader_train,
                 optimizer, device, epoch, loss_scaler,
@@ -411,8 +411,8 @@ def main(args):
                 candidate_pool=candidate_pool, 
                 # validation_data_loader=data_loader_val, 
                 pool_sampling_prob=pool_sampling_prob,  # Pass candidate_pool and sampling probability
-                m=400,  # Number of sampled paths
-                k=200,    # Number of top paths to train on
+                m=2500,  # Number of sampled paths
+                k=1250,    # Number of top paths to train on
                 interval=args.interval
             )
             
@@ -420,8 +420,8 @@ def main(args):
         lr_scheduler.step(epoch)
         if args.output_dir:
             # checkpoint_paths = [output_dir / 'checkpoint.pth']
-            # checkpoint_paths = [output_dir / ('checkpoint-sn-400-interval-5-top-' + str((epoch+1)//20) + '.pth')]
-            checkpoint_paths = [output_dir / (args.save_checkpoint_path + str((epoch+1)) + '.pth')]
+            checkpoint_paths = [output_dir / (args.save_checkpoint_path + str((epoch+1)//20) + '.pth')]
+            # checkpoint_paths = [output_dir / (args.save_checkpoint_path + str((epoch+1)) + '.pth')]
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({
                     'model': model_without_ddp.state_dict(),
