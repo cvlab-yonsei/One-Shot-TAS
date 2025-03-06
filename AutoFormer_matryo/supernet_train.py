@@ -183,7 +183,7 @@ def get_args_parser():
 
     parser.add_argument('--amp', action='store_true')
     parser.add_argument('--no-amp', action='store_false', dest='amp')
-    parser.set_defaults(amp=True)
+    parser.set_defaults(amp=False) # True -> False
 
 
     return parser
