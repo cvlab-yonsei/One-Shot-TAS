@@ -52,7 +52,9 @@ def freeze_weights(model, current_config, prev_config):
             
             elif 'attn' in name and 'qkv' in name:
                 if 'blocks' in parts:
-                    layer_idx = int(parts[parts.index('blocks') + 1])  # "blocks.X"에서 X 추출
+                    layer_idx = int(parts[parts.index('blocks') + 1])
+                    if layer_idx >= len(prev_config['num_heads']):
+                        continue  # 처리하지 않고 다음 루프로 넘어감
                     prev_heads = prev_config['num_heads'][layer_idx]
                     cur_heads = current_config['num_heads'][layer_idx]
                     head_dim = param.shape[0] // cur_heads
@@ -61,7 +63,9 @@ def freeze_weights(model, current_config, prev_config):
             
             elif 'fc1' in name:
                 if 'blocks' in parts:
-                    layer_idx = int(parts[parts.index('blocks') + 1])  # "blocks.X"에서 X 추출
+                    layer_idx = int(parts[parts.index('blocks') + 1])
+                    if layer_idx >= len(prev_config['mlp_ratio']):
+                        continue  # 처리하지 않고 다음 루프로 넘어감
                     prev_mlp_ratio = prev_config['mlp_ratio'][layer_idx]
                     cur_mlp_ratio = current_config['mlp_ratio'][layer_idx]
                     prev_dim = int(param.shape[0] * (prev_mlp_ratio / cur_mlp_ratio))
@@ -69,7 +73,9 @@ def freeze_weights(model, current_config, prev_config):
             
             elif 'fc2' in name:
                 if 'blocks' in parts:
-                    layer_idx = int(parts[parts.index('blocks') + 1])  # "blocks.X"에서 X 추출
+                    layer_idx = int(parts[parts.index('blocks') + 1])
+                    if layer_idx >= len(prev_config['mlp_ratio']):
+                        continue  # 처리하지 않고 다음 루프로 넘어감
                     prev_mlp_ratio = prev_config['mlp_ratio'][layer_idx]
                     cur_mlp_ratio = current_config['mlp_ratio'][layer_idx]
                     
@@ -80,6 +86,7 @@ def freeze_weights(model, current_config, prev_config):
                     elif len(param.shape) == 1:
                         prev_dim = int(param.shape[0] * (prev_mlp_ratio / cur_mlp_ratio))
                         param[:prev_dim].requires_grad = False
+
 
 def sample_configs(choices):
 
@@ -128,6 +135,12 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             model_module.set_sample_config(config=config)
             prev_config = get_previous_config(config=config, choices=choices)
             freeze_weights(model, config, prev_config)
+
+            # Freeze 적용된 파라미터 확인
+            for name, param in model.named_parameters():
+                if not param.requires_grad:
+                    print(f"[Frozen] {name}")
+
         elif mode == 'retrain':
             config = retrain_config
             model_module = unwrap_model(model)
@@ -168,6 +181,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             is_second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
             loss_scaler(loss, optimizer, clip_grad=max_norm,
                     parameters=model.parameters(), create_graph=is_second_order)
+            
         else:
             loss.backward()
             optimizer.step()
