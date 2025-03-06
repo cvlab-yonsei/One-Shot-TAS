@@ -352,7 +352,10 @@ class EvolutionSearcher(object):
         # get candidate pool from training process
         # self.load_candidates_from_pkl('candidate_pool_460_no_duplicate.pkl', self.population_num)
         
-        self.load_candidates_from_pkl('candidate_pool__midtraining12-no-train-random-440-m400k200-1batch5config-interval-1-top(original_pool_no_duplicate_full_0.8_linear).pkl', self.population_num)
+        ## 이부분 정의
+        # self.load_candidates_from_pkl('candidate_pool_greeze_tas_400_sn_linear08_no_duplicate_(base).pkl', self.population_num)
+
+
         # self.load_candidates_from_pkl('candidate_pool__midtraining_random_400_sn_linear08_no_duplicate.pkl', self.population_num)
         
         ######
@@ -555,7 +558,7 @@ def get_args_parser():
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
-    parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
+    parser.add_argument('--dist_url', default='tcp://localhost:2040', help='url used to set up distributed training')
     parser.add_argument('--amp', action='store_true')
     parser.add_argument('--no-amp', action='store_false', dest='amp')
     parser.set_defaults(amp=True)

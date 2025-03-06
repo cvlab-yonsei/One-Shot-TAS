@@ -15,10 +15,6 @@ import os
 import yaml
 from lib.config import cfg, update_config_from_file
 
-import pickle
-import sys
-import warnings
-
 def decode_cand_tuple(cand_tuple):
     depth = cand_tuple[0]
     return depth, list(cand_tuple[1:depth+1]), list(cand_tuple[depth + 1: 2 * depth + 1]), cand_tuple[-1]
@@ -154,65 +150,6 @@ class EvolutionSearcher(object):
             self.candidates.append(cand)
             print('random {}/{}'.format(len(self.candidates), num))
         print('random_num = {}'.format(len(self.candidates)))
-        
-        
-    def load_candidates_from_pkl(self, pkl_path, num):
-        """
-        Load candidate data from a .pkl file and set self.candidates to the first `num` candidates 
-        that satisfy the parameter limit constraints using the is_legal method.
-
-        Args:
-            pkl_path (str): Path to the .pkl file containing candidate data.
-            num (int): Number of candidates to load and set for self.candidates.
-        """
-        print('Loading candidates from .pkl file...')
-        
-        # Load the .pkl file
-        with open(pkl_path, 'rb') as f:
-            loaded_candidates = pickle.load(f)
-        
-        # Check if the loaded candidates are in a valid format (list, array, etc.)
-        if not isinstance(loaded_candidates, list):
-            raise ValueError(f"Loaded data from {pkl_path} is not a list. Please check the .pkl file format.")
-        
-        def stack_loaded_cand(candidates, *, batchsize=10):
-            """
-            Similar to stack_random_cand, but uses pre-loaded candidates instead of randomly generated ones.
-            """
-            idx = 0
-            while True:
-                cands = candidates[idx:idx + batchsize]
-                idx += batchsize
-                if idx >= len(candidates):  # If we've gone through all candidates, start from the beginning
-                    idx = 0
-                for cand_dict in cands:
-                    # Convert dict to tuple format expected by is_legal
-                    depth = cand_dict['layer_num']
-                    mlp_ratio = cand_dict['mlp_ratio']
-                    num_heads = cand_dict['num_heads']
-                    embed_dim = cand_dict['embed_dim'][0]  # Assume embed_dim is same for all layers, so use the first one
-                    cand_tuple = (depth, *mlp_ratio, *num_heads, embed_dim)
-                    
-                    if cand_tuple not in self.vis_dict:
-                        self.vis_dict[cand_tuple] = {}
-                    info = self.vis_dict[cand_tuple]
-                    
-                    yield cand_tuple, cand_dict
-
-        print('Starting to load candidates from loaded .pkl file...')
-        
-        cand_iter = stack_loaded_cand(loaded_candidates)  # Create an iterator for loaded candidates
-        
-        while len(self.candidates) < num:
-            cand_tuple, cand_dict = next(cand_iter)
-            
-            if not self.is_legal(cand_tuple):
-                continue
-            
-            self.candidates.append(cand_tuple)
-            print('loaded {}/{}'.format(len(self.candidates), num))
-        
-        print('loaded_num = {}'.format(len(self.candidates)))
 
     def get_mutation(self, k, mutation_num, m_prob, s_prob):
         assert k in self.keep_top_k
@@ -301,30 +238,6 @@ class EvolutionSearcher(object):
 
         print('crossover_num = {}'.format(len(res)))
         return res
-    
-    # def search(self):
-    #     print(
-    #     'population_num = {} select_num = {} mutation_num = {} crossover_num = {} random_num = {} max_epochs = {}'.format(
-    #         self.population_num, self.select_num, self.mutation_num, self.crossover_num,
-    #         self.population_num - self.mutation_num - self.crossover_num, self.max_epochs))
-        
-    #     print('Using pre-loaded candidates for evaluation only.')
-        
-    #     # Load candidate pool from pkl file
-    #     self.load_candidates_from_pkl('candidate_pool_460_sn_decay_005_linear08_no_duplicate.pkl', 1050)
-        
-    #     print('Evaluating loaded candidates...')
-        
-    #     # Sequential evaluation of loaded candidates
-    #     for idx, cand in enumerate(self.candidates):
-    #         print(f'Evaluating candidate {idx + 1}/{len(self.candidates)}...')
-    #         if self.is_legal(cand):
-    #             print(f"Candidate {idx + 1} is valid with acc = {self.vis_dict[cand]['acc']}, "
-    #                 f"test_acc = {self.vis_dict[cand]['test_acc']}, params = {self.vis_dict[cand]['params']}")
-    #         else:
-    #             print(f"Candidate {idx + 1} is invalid.")
-        
-    #     print('Evaluation of all candidates completed.')
 
     def search(self):
         print(
@@ -334,19 +247,7 @@ class EvolutionSearcher(object):
 
         # self.load_checkpoint()
 
-        #####
-        # self.get_random(self.population_num) # original
-        
-        # get candidate pool from training process
-        # self.load_candidates_from_pkl('candidate_pool_460_no_duplicate.pkl', self.population_num)
-        
-
-        ## 여기서 init 파일 정의
-        self.load_candidates_from_pkl('candidate_pool_greeze_tas_460_m2500k1250_sn_linear08_no_duplicate_droppath01(base).pkl', self.population_num)
-        # self.load_candidates_from_pkl('candidate_pool__midtraining9-no-train-random-400-m400k200-1batch5config-interval-1-top(original_pool_no_duplicate_full_0.8_linear).pkl', self.population_num)
-        # self.load_candidates_from_pkl('candidate_pool__midtraining_random_400_sn_linear08_no_duplicate.pkl', self.population_num)
-        
-        ######
+        self.get_random(self.population_num)
 
         while self.epoch < self.max_epochs:
             print('epoch = {}'.format(self.epoch))
@@ -546,22 +447,14 @@ def get_args_parser():
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
-    parser.add_argument('--dist_url', default='tcp://localhost:2040', help='url used to set up distributed training')
+    parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
     parser.add_argument('--amp', action='store_true')
     parser.add_argument('--no-amp', action='store_false', dest='amp')
     parser.set_defaults(amp=True)
-    
-    parser.add_argument('--config-list-path', default='', type=str, help='Path to the config list pickle file')
-    parser.add_argument('--log-file-path', default='', type=str, help='Path to the log file')
 
     return parser
 
 def main(args):
-    # UserWarning 무시
-    warnings.filterwarnings("ignore", category=UserWarning)
-
-    sys.stdout = open(args.log_file_path, 'w')
-    sys.stderr = sys.stdout
 
     update_config_from_file(args.cfg)
     utils.init_distributed_mode(args)
