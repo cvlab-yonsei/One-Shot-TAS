@@ -15,7 +15,7 @@ from timm.optim import create_optimizer
 from timm.utils import NativeScaler
 from lib.datasets import build_dataset
 from supernet_engine_sn1 import train_one_epoch, evaluate
-from supernet_engine_real_original import train_one_epoch_original, evaluate_original
+from supernet_engine_only_supernet import train_one_epoch_original, evaluate_original
 from lib.samplers import RASampler
 from lib import utils
 from lib.config import cfg, update_config_from_file

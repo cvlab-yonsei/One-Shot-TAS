@@ -14,7 +14,7 @@ from timm.scheduler import create_scheduler
 from timm.optim import create_optimizer
 from timm.utils import NativeScaler
 from lib.datasets import build_dataset
-from supernet_engine_sn1 import train_one_epoch, evaluate
+from supernet_engine_sn1_small import train_one_epoch, evaluate
 from supernet_engine_real_original import train_one_epoch_original, evaluate_original
 from lib.samplers import RASampler
 from lib import utils
@@ -23,12 +23,6 @@ from model.supernet_transformer import Vision_TransformerSuper
 
 import sys
 import warnings
-
-# # UserWarning 무시
-# warnings.filterwarnings("ignore", category=UserWarning)
-
-# sys.stdout = open('./log/supernet_greedy_spectral_norm_400ep_interval_5_topk.log', 'w')
-# sys.stderr = sys.stdout
 
 
 def get_args_parser():
@@ -59,7 +53,7 @@ def get_args_parser():
     parser.add_argument('--drop', type=float, default=0.0, metavar='PCT',
                         help='Dropout rate (default: 0.)')
     parser.add_argument('--drop-path', type=float, default=0.1, metavar='PCT',
-                        help='Drop path rate (default: 0.1)') # 0.1-> 0.0
+                        help='Drop path rate (default: 0.1)') # 0.1 -> 0.0
     parser.add_argument('--drop-block', type=float, default=None, metavar='PCT',
                         help='Drop block rate (default: None)')
 
@@ -83,11 +77,8 @@ def get_args_parser():
                         help='Clip gradient norm (default: None, no clipping)')
     parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
                         help='SGD momentum (default: 0.9)')
-    parser.add_argument('--weight-decay', type=float, default=0.02,
-                        help='weight decay (default: 0.02)') # pre-nas
-    # parser.add_argument('--weight-decay', type=float, default=0.05,
-    #                     help='weight decay (default: 0.05)') # original
-
+    parser.add_argument('--weight-decay', type=float, default=0.05,
+                        help='weight decay (default: 0.05)')
 
     # Learning rate schedule parameters
     parser.add_argument('--sched', default='cosine', type=str, metavar='SCHEDULER',
@@ -109,7 +100,7 @@ def get_args_parser():
 
     parser.add_argument('--decay-epochs', type=float, default=30, metavar='N',
                         help='epoch interval to decay LR')
-    parser.add_argument('--warmup-epochs', type=int, default=20, metavar='N',
+    parser.add_argument('--warmup-epochs', type=int, default=5, metavar='N',
                         help='epochs to warmup LR, if scheduler supports')
     parser.add_argument('--cooldown-epochs', type=int, default=10, metavar='N',
                         help='epochs to cooldown LR at min_lr, after cyclic schedule ends')
@@ -121,18 +112,14 @@ def get_args_parser():
     # Augmentation parameters
     parser.add_argument('--color-jitter', type=float, default=0.4, metavar='PCT',
                         help='Color jitter factor (default: 0.4)')
-    # parser.add_argument('--aa', type=str, default='rand-m9-mstd0.5-inc1', metavar='NAME',
-    #                     help='Use AutoAugment policy. "v0" or "original". " + \
-    #                          "(default: rand-m9-mstd0.5-inc1)'),
-    parser.add_argument('--aa', type=str, default='rand-m9-n2-mstd0.5-inc1', metavar='NAME',
-                    help='Use RandAugment policy "rand-m9-n2-mstd0.5-inc1".')
+    parser.add_argument('--aa', type=str, default='rand-m9-mstd0.5-inc1', metavar='NAME',
+                        help='Use AutoAugment policy. "v0" or "original". " + \
+                             "(default: rand-m9-mstd0.5-inc1)'),
     parser.add_argument('--smoothing', type=float, default=0.1, help='Label smoothing (default: 0.1)')
     parser.add_argument('--train-interpolation', type=str, default='bicubic',
                         help='Training interpolation (random, bilinear, bicubic default: "bicubic")')
 
     parser.add_argument('--repeated-aug', action='store_true')
-    parser.set_defaults(repeated_aug=True)
-    
     parser.add_argument('--no-repeated-aug', action='store_false', dest='repeated_aug')
 
 
@@ -149,34 +136,16 @@ def get_args_parser():
                         help='Do not random erase first (clean) augmentation split')
 
     # * Mixup params
-    # original
-    # parser.add_argument('--mixup', type=float, default=0.8,
-    #                     help='mixup alpha, mixup enabled if > 0. (default: 0.8)')
-    # parser.add_argument('--cutmix', type=float, default=1.0,
-    #                     help='cutmix alpha, cutmix enabled if > 0. (default: 1.0)')
-    # parser.add_argument('--cutmix-minmax', type=float, nargs='+', default=None,
-    #                     help='cutmix min/max ratio, overrides alpha and enables cutmix if set (default: None)')
-    # parser.add_argument('--mixup-prob', type=float, default=1.0,
-    #                     help='Probability of performing mixup or cutmix when either/both is enabled')
-    # parser.add_argument('--mixup-switch-prob', type=float, default=0.5,
-    #                     help='Probability of switching to cutmix when both mixup and cutmix enabled')
-    # parser.add_argument('--mixup-mode', type=str, default='batch',
-    #                     help='How to apply mixup/cutmix params. Per "batch", "pair", or "elem"')
-    
-    # pre-nas aug
-    parser.add_argument('--mixup', type=float, default=0.0,
-                        help='mixup alpha, mixup disabled if 0. (default: 0.0)')
-    parser.add_argument('--cutmix', type=float, default=0.0,
-                        help='cutmix alpha, cutmix disabled if 0. (default: 0.0)')
-    parser.add_argument('--mixup-switch-prob', type=float, default=0.0,
-                        help='Probability of switching to cutmix when both mixup and cutmix enabled (default: 0.0)')
-
+    parser.add_argument('--mixup', type=float, default=0.8,
+                        help='mixup alpha, mixup enabled if > 0. (default: 0.8)')
+    parser.add_argument('--cutmix', type=float, default=1.0,
+                        help='cutmix alpha, cutmix enabled if > 0. (default: 1.0)')
     parser.add_argument('--cutmix-minmax', type=float, nargs='+', default=None,
                         help='cutmix min/max ratio, overrides alpha and enables cutmix if set (default: None)')
     parser.add_argument('--mixup-prob', type=float, default=1.0,
                         help='Probability of performing mixup or cutmix when either/both is enabled')
-    # parser.add_argument('--mixup-switch-prob', type=float, default=0.5,
-    #                     help='Probability of switching to cutmix when both mixup and cutmix enabled')
+    parser.add_argument('--mixup-switch-prob', type=float, default=0.5,
+                        help='Probability of switching to cutmix when both mixup and cutmix enabled')
     parser.add_argument('--mixup-mode', type=str, default='batch',
                         help='How to apply mixup/cutmix params. Per "batch", "pair", or "elem"')
 
@@ -216,7 +185,7 @@ def get_args_parser():
 
     parser.add_argument('--amp', action='store_true')
     parser.add_argument('--no-amp', action='store_false', dest='amp')
-    parser.set_defaults(amp=True)
+    parser.set_defaults(amp=True) # False 로 바꿔
 
 
     return parser
@@ -398,10 +367,10 @@ def main(args):
         # pool_sampling_prob = 0.0
         pool_sampling_prob = 0.8
         # # pool_sampling_prob = min(0.8, epoch / args.epochs)
-        if epoch < 600:
+        if epoch < 449:
             pool_sampling_prob = 0
-        elif 600 <= epoch <= args.epochs:
-            pool_sampling_prob = min(0.8, (epoch - 600) / 100)
+        elif 449 <= epoch <= args.epochs:
+            pool_sampling_prob = min(0.8, (epoch - 449) / 50)
         else:
             pool_sampling_prob = 0.8
             
@@ -413,7 +382,7 @@ def main(args):
         #     pool_sampling_prob = 0.8
             
 
-        if epoch < 600:
+        if epoch < 449:
             train_stats = train_one_epoch_original(
                 model, criterion, data_loader_train,
                 optimizer, device, epoch, loss_scaler,

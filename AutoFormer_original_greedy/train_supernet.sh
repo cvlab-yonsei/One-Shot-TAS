@@ -196,15 +196,15 @@
 # --min-param-limits 5 --param-limits 6 \
 # --log-file-path './log/search_sn_midtraining9-no-train-random-400-m400k200-1batch5config-interval-1-top(original_pool_no_duplicate_full_0.8_linear)_6M.log'
 
-# python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train_sn1.py --data-path '/data' --gp \
-# --change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 500 --warmup-epochs 20 \
-# --resume '/OUTPUT_PATH/checkpoint-original-19.pth' --output /OUTPUT_PATH --batch-size 128 \
-# --save_checkpoint_path 'checkpoint-sn-midtraining13-droppath00-400-m2500k1250-interval-1-top(original_pool_no_duplicate_full_0.8_linear)-' --save_log_path './log/supernet_midtraining13-droppath00-400-m2500k1250-interval-1-top(original_pool_no_duplicate_full_0.8_linear).log' --interval 1
+python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train_sn1.py --data-path '/data' --gp \
+--change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 500 --warmup-epochs 20 \
+--output /OUTPUT_PATH --batch-size 128 \
+--save_checkpoint_path 'checkpoint-tiny-fulltraining-droppath00-prenas-aug' --save_log_path './log/supernet_tiny-fulltraining-droppath00-prenas-aug.log' --interval 1
 
-python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution_init_mix.py --data-path '/data' --gp \
---change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint-sn-midtraining13-droppath00-400-m2500k1250-interval-1-top(original_pool_no_duplicate_full_0.8_linear)-25.pth' \
---min-param-limits 5 --param-limits 6 \
---log-file-path './log/search_sn_midtraining13-droppath00-400-m2500k1250-interval-1-top(original_pool_no_duplicate_full_0.8_linear)_6M.log'
+# python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution_init_mix.py --data-path '/data' --gp \
+# --change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint-sn-midtraining13-droppath00-400-m2500k1250-interval-1-top(original_pool_no_duplicate_full_0.8_linear)-25.pth' \
+# --min-param-limits 5 --param-limits 6 \
+# --log-file-path './log/search_sn_midtraining13-droppath00-400-m2500k1250-interval-1-top(original_pool_no_duplicate_full_0.8_linear)_6M.log'
 
 
 # python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution_init_mix.py --data-path '/data' --gp \

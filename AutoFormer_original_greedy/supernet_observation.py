@@ -15,7 +15,7 @@ from timm.optim import create_optimizer
 from timm.utils import NativeScaler
 from lib.datasets import build_dataset
 from supernet_engine_sn1 import train_one_epoch, evaluate
-from supernet_engine_real_original import train_one_epoch_original, evaluate_original
+from supernet_engine_real_original_observation import train_one_epoch_original, evaluate_original, evaluate_and_visualize
 from lib.samplers import RASampler
 from lib import utils
 from lib.config import cfg, update_config_from_file
@@ -23,6 +23,7 @@ from model.supernet_transformer import Vision_TransformerSuper
 
 import sys
 import warnings
+import pickle
 
 # # UserWarning 무시
 # warnings.filterwarnings("ignore", category=UserWarning)
@@ -209,14 +210,14 @@ def get_args_parser():
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
-    parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
+    parser.add_argument('--dist_url', default='tcp://localhost:2040', help='url used to set up distributed training')
     parser.add_argument('--save_checkpoint_path', default='', help='save checkpoint to the path')
     parser.add_argument('--save_log_path', default='', help='save log file to the path')
     parser.add_argument('--interval', default=1, type=int, help='interval of reusing top-k subnet searched by the sn indicator')
 
     parser.add_argument('--amp', action='store_true')
     parser.add_argument('--no-amp', action='store_false', dest='amp')
-    parser.set_defaults(amp=True)
+    parser.set_defaults(amp=True) # False로 바꿈
 
 
     return parser
@@ -387,84 +388,54 @@ def main(args):
     start_time = time.time()
     max_accuracy = 0.0
     
-    # Initialize candidate pool and pool sampling probability
-    candidate_pool = []
-    pool_sampling_prob = 0  # Start with 0, gradually increase
-
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
+
+        # 지우고 여기서부터 호출해보자.
+        # def evaluate_original(data_loader, model, device, amp=True, choices=None, mode='super', retrain_config=None):
+        # test_stats = evaluate_original(data_loader_val, model, device, amp=args.amp, choices=choices, mode = args.mode, retrain_config=retrain_config)
         
-        # pool_sampling_prob = 0.0
-        pool_sampling_prob = 0.8
-        # # pool_sampling_prob = min(0.8, epoch / args.epochs)
-        if epoch < 600:
-            pool_sampling_prob = 0
-        elif 600 <= epoch <= args.epochs:
-            pool_sampling_prob = min(0.8, (epoch - 600) / 100)
-        else:
-            pool_sampling_prob = 0.8
-            
-        # if epoch < 400:
-        #     pool_sampling_prob = 0
-        # elif 400 <= epoch <= args.epochs:
-        #     pool_sampling_prob = min(0.8, (epoch - 400) / 100)
-        # else:
-        #     pool_sampling_prob = 0.8
-            
+        loaded_good_config = []
+        loaded_bad_config = []
+        loaded_good_config2 = []
+        loaded_bad_config2 = []
+        # 저장된 pkl 파일을 로드하는 코드
+        with open("good_config_10M.pkl", "rb") as f:
+            loaded_good_config = pickle.load(f)
 
-        if epoch < 600:
-            train_stats = train_one_epoch_original(
-                model, criterion, data_loader_train,
-                optimizer, device, epoch, loss_scaler,
-                args.clip_grad, model_ema, mixup_fn,
-                amp=args.amp, teacher_model=teacher_model,
-                teach_loss=teacher_loss,
-                choices=choices, mode = args.mode, retrain_config=retrain_config,
-            )
-            
-        else:
-            print("pool_sampling_prob : ", pool_sampling_prob)
-            
-            train_stats = train_one_epoch(
-                model, criterion, data_loader_train,
-                optimizer, device, epoch, loss_scaler,
-                args.clip_grad, model_ema, mixup_fn,
-                amp=args.amp, teacher_model=teacher_model,
-                teach_loss=teacher_loss,
-                choices=choices, mode = args.mode, retrain_config=retrain_config,
-                candidate_pool=candidate_pool, 
-                # validation_data_loader=data_loader_val, 
-                pool_sampling_prob=pool_sampling_prob,  # Pass candidate_pool and sampling probability
-                m=2500,  # Number of sampled paths
-                k=1250,    # Number of top paths to train on
-                interval=args.interval
-            )
-            
+        with open("bad_config_6M.pkl", "rb") as f:
+            loaded_bad_config = pickle.load(f)
 
-        lr_scheduler.step(epoch)
-        if args.output_dir:
-            # checkpoint_paths = [output_dir / 'checkpoint.pth']
-            checkpoint_paths = [output_dir / (args.save_checkpoint_path + str((epoch+1)//20) + '.pth')]
-            # checkpoint_paths = [output_dir / (args.save_checkpoint_path + str((epoch+1)) + '.pth')]
-            for checkpoint_path in checkpoint_paths:
-                utils.save_on_master({
-                    'model': model_without_ddp.state_dict(),
-                    'optimizer': optimizer.state_dict(),
-                    'lr_scheduler': lr_scheduler.state_dict(),
-                    'epoch': epoch,
-                    # 'model_ema': get_state_dict(model_ema),
-                    'scaler': loss_scaler.state_dict(),
-                    'args': args,
-                }, checkpoint_path)
+        with open("good_config_6M.pkl", "rb") as f:
+            loaded_good_config2 = pickle.load(f)
 
-        test_stats = evaluate(data_loader_val, model, device, amp=args.amp, choices=choices, mode = args.mode, retrain_config=retrain_config)
+        with open("bad_config_10M.pkl", "rb") as f:
+            loaded_bad_config2 = pickle.load(f)
+
+
+        # reference_config = {'acc1': 76.942, 'acc5': 93.484, 'loss': 1.009, 'config': "{'layer_num': 14, 'mlp_ratio': [4, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5, 4, 4, 4, 4, 4, 4, 4], 'num_heads': [3, 4, 3, 4, 4, 4, 3, 4, 4, 3, 4, 3, 3, 4], 'embed_dim': [240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240]}", 'parameters': 9801160}
+        reference_config = {'layer_num': 14, 'mlp_ratio': [4, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5, 4, 4, 4, 4, 4, 4, 4], 'num_heads': [3, 4, 3, 4, 4, 4, 3, 4, 4, 3, 4, 3, 3, 4], 'embed_dim': [240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240]}
+
+        # reference_config = {'acc1': 74.956, 'acc5': 92.5, 'loss': 1.096, 'config': "{'layer_num': 12, 'mlp_ratio': [4, 4, 3.5, 4, 4, 4, 4, 4, 4, 4, 4, 4], 'num_heads': [4, 3, 3, 3, 3, 3, 3, 4, 4, 3, 4, 3], 'embed_dim': [192, 192, 192, 192, 192, 192, 192, 192, 192, 192, 192, 192]}", 'parameters': 5969992}
+        reference_config2 = {'layer_num': 12, 'mlp_ratio': [4, 4, 3.5, 4, 4, 4, 4, 4, 4, 4, 4, 4], 'num_heads': [4, 3, 3, 3, 3, 3, 3, 4, 4, 3, 4, 3], 'embed_dim': [192, 192, 192, 192, 192, 192, 192, 192, 192, 192, 192, 192]}
+        
+        reference_config3 = {
+            'layer_num': 14,
+            'mlp_ratio': [4.0] * 14,
+            'num_heads': [4] * 14,
+            'embed_dim': [256] * 14
+        }
+
+        # def evaluate_and_visualize(data_loader, model, device, amp=True, good_configs=None, bad_configs=None, reference_config=None):
+        # def evaluate_and_visualize(data_loader, model, device, amp=True, good_configs=None, bad_configs=None, good_configs2=None, bad_configs2=None, reference_config=None, reference_config2=None, reference_config3=None):
+        test_stats = evaluate_and_visualize(data_loader_val, model, device, amp=args.amp, good_configs=loaded_good_config[:30], bad_configs=loaded_bad_config[-30:], good_configs2=loaded_good_config2[:30], bad_configs2=loaded_bad_config2[-30:], reference_config=reference_config, reference_config2=reference_config2, reference_config3=reference_config3)
+        
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
         max_accuracy = max(max_accuracy, test_stats["acc1"])
         print(f'Max accuracy: {max_accuracy:.2f}%')
 
-        log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                     **{f'test_{k}': v for k, v in test_stats.items()},
+        log_stats = {**{f'test_{k}': v for k, v in test_stats.items()},
                      'epoch': epoch,
                      'n_parameters': n_parameters}
 

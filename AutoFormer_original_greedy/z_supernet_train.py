@@ -14,8 +14,7 @@ from timm.scheduler import create_scheduler
 from timm.optim import create_optimizer
 from timm.utils import NativeScaler
 from lib.datasets import build_dataset
-from supernet_engine_sn1 import train_one_epoch, evaluate
-from supernet_engine_real_original import train_one_epoch_original, evaluate_original
+from z_supernet_engine import train_one_epoch, evaluate
 from lib.samplers import RASampler
 from lib import utils
 from lib.config import cfg, update_config_from_file
@@ -23,13 +22,6 @@ from model.supernet_transformer import Vision_TransformerSuper
 
 import sys
 import warnings
-
-# # UserWarning 무시
-# warnings.filterwarnings("ignore", category=UserWarning)
-
-# sys.stdout = open('./log/supernet_greedy_spectral_norm_400ep_interval_5_topk.log', 'w')
-# sys.stderr = sys.stdout
-
 
 def get_args_parser():
     parser = argparse.ArgumentParser('AutoFormer training and evaluation script', add_help=False)
@@ -218,11 +210,9 @@ def get_args_parser():
     parser.add_argument('--no-amp', action='store_false', dest='amp')
     parser.set_defaults(amp=True)
 
-
     return parser
 
 def main(args):
-    
     # UserWarning 무시
     warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -329,7 +319,7 @@ def main(args):
     model_without_ddp = model
     if args.distributed:
 
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True) # 이거 원래 True
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module
 
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -386,61 +376,19 @@ def main(args):
     print("Start training")
     start_time = time.time()
     max_accuracy = 0.0
-    
-    # Initialize candidate pool and pool sampling probability
-    candidate_pool = []
-    pool_sampling_prob = 0  # Start with 0, gradually increase
 
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
-        
-        # pool_sampling_prob = 0.0
-        pool_sampling_prob = 0.8
-        # # pool_sampling_prob = min(0.8, epoch / args.epochs)
-        if epoch < 600:
-            pool_sampling_prob = 0
-        elif 600 <= epoch <= args.epochs:
-            pool_sampling_prob = min(0.8, (epoch - 600) / 100)
-        else:
-            pool_sampling_prob = 0.8
-            
-        # if epoch < 400:
-        #     pool_sampling_prob = 0
-        # elif 400 <= epoch <= args.epochs:
-        #     pool_sampling_prob = min(0.8, (epoch - 400) / 100)
-        # else:
-        #     pool_sampling_prob = 0.8
-            
 
-        if epoch < 600:
-            train_stats = train_one_epoch_original(
-                model, criterion, data_loader_train,
-                optimizer, device, epoch, loss_scaler,
-                args.clip_grad, model_ema, mixup_fn,
-                amp=args.amp, teacher_model=teacher_model,
-                teach_loss=teacher_loss,
-                choices=choices, mode = args.mode, retrain_config=retrain_config,
-            )
-            
-        else:
-            print("pool_sampling_prob : ", pool_sampling_prob)
-            
-            train_stats = train_one_epoch(
-                model, criterion, data_loader_train,
-                optimizer, device, epoch, loss_scaler,
-                args.clip_grad, model_ema, mixup_fn,
-                amp=args.amp, teacher_model=teacher_model,
-                teach_loss=teacher_loss,
-                choices=choices, mode = args.mode, retrain_config=retrain_config,
-                candidate_pool=candidate_pool, 
-                # validation_data_loader=data_loader_val, 
-                pool_sampling_prob=pool_sampling_prob,  # Pass candidate_pool and sampling probability
-                m=2500,  # Number of sampled paths
-                k=1250,    # Number of top paths to train on
-                interval=args.interval
-            )
-            
+        train_stats = train_one_epoch(
+            model, criterion, data_loader_train,
+            optimizer, device, epoch, loss_scaler,
+            args.clip_grad, model_ema, mixup_fn,
+            amp=args.amp, teacher_model=teacher_model,
+            teach_loss=teacher_loss,
+            choices=choices, mode = args.mode, retrain_config=retrain_config,
+        )
 
         lr_scheduler.step(epoch)
         if args.output_dir:
@@ -457,6 +405,18 @@ def main(args):
                     'scaler': loss_scaler.state_dict(),
                     'args': args,
                 }, checkpoint_path)
+        # if args.output_dir:
+        #     checkpoint_paths = [output_dir / 'checkpoint.pth']
+        #     for checkpoint_path in checkpoint_paths:
+        #         utils.save_on_master({
+        #             'model': model_without_ddp.state_dict(),
+        #             'optimizer': optimizer.state_dict(),
+        #             'lr_scheduler': lr_scheduler.state_dict(),
+        #             'epoch': epoch,
+        #             # 'model_ema': get_state_dict(model_ema),
+        #             'scaler': loss_scaler.state_dict(),
+        #             'args': args,
+        #         }, checkpoint_path)
 
         test_stats = evaluate(data_loader_val, model, device, amp=args.amp, choices=choices, mode = args.mode, retrain_config=retrain_config)
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")

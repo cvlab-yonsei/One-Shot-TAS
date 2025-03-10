@@ -12,6 +12,8 @@ import time
 import torch.nn as nn
 from typing import List, Dict
 
+import os
+
 import pickle
 
 def sample_config_from_topk(model: torch.nn.Module, choices: Dict, m: int, k: int, device: torch.device, 
@@ -23,11 +25,16 @@ def sample_config_from_topk(model: torch.nn.Module, choices: Dict, m: int, k: in
     original_state = {name: param.clone() for name, param in model.state_dict().items()}
 
     # DSS 점수를 계산하기 위한 기본 설정
+    # MLP_RATIO: 4.0
+    # NUM_HEADS: 10
+    # EMBED_DIM: 640
+    # DEPTH: 16
+
     sampled_config = {
         'layer_num': 14,
         'mlp_ratio': [4.0] * 14,
-        'num_heads': [4] * 14,
-        'embed_dim': [256] * 14
+        'num_heads': [7] * 14,
+        'embed_dim': [448] * 14
     }
     set_arc(model, sampled_config)
 
@@ -105,10 +112,11 @@ def sample_config_from_topk(model: torch.nn.Module, choices: Dict, m: int, k: in
     remaining_items = []
     for group_id in range(5):
         group_losses = [loss for loss in losses if loss[3] == group_id]
-        group_losses.sort(key=lambda x: x[0], reverse=True)
-        num_to_select = max(1, len(group_losses) // 2)
-        top_k_paths.extend(group_losses[:num_to_select])
-        remaining_items.extend(group_losses[num_to_select:])
+        if len(group_losses) > 0:
+            group_losses.sort(key=lambda x: x[0], reverse=True)
+            num_to_select = max(1, len(group_losses) // 2)
+            top_k_paths.extend(group_losses[:num_to_select])
+            remaining_items.extend(group_losses[num_to_select:])
     if len(top_k_paths) < k:
         remaining_items.sort(key=lambda x: x[0], reverse=True)
         top_k_paths.extend(remaining_items[:k - len(top_k_paths)])
@@ -154,13 +162,13 @@ def sum_arr(arr):
 
 def get_group(param_count):
     # Parameter 수를 기준으로 그룹을 반환
-    if param_count < 6e6:
+    if param_count < 18e6:
         return 0  # ~6M
-    elif 6e6 <= param_count < 7e6:
+    elif 18e6 <= param_count < 23e6:
         return 1  # 6M~7M
-    elif 7e6 <= param_count < 8e6:
+    elif 23e6 <= param_count < 28e6:
         return 2  # 7M~8M
-    elif 8e6 <= param_count < 9e6:
+    elif 28e6 <= param_count < 33e6:
         return 3  # 8M~9M
     else:
         return 4  # 9M~
@@ -282,10 +290,10 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             
 
         # candidate_pool을 pkl 파일로 저장
-        with open('candidate_pool_tiny-fulltraining-droppath00-prenas-aug.pkl', 'wb') as f:
+        with open('candidate_pool_greeze_tas_450_sn_linear08_no_duplicate_droppath01(small).pkl', 'wb') as f:
             pickle.dump(candidate_pool, f)
 
-        print("candidate_pool이 candidate_pool.pkl 파일로 저장되었습니다.")
+        print("candidate_pool이 candidate_pool_greeze_tas_450_sn_linear08_no_duplicate_droppath01(small).pkl 파일로 저장되었습니다.")
 
             
         
