@@ -29,10 +29,29 @@ class RelativePosition2D_super(nn.Module):
         self.sample_embeddings_table_h = None
         self.sample_embeddings_table_v = None
 
-    def set_sample_config(self, sample_head_dim):
+    def set_sample_config(self, sample_head_dim, sample_head_dim_prev=None):
+        # print("_prev None check RelativePosition2DSuper : ", sample_head_dim_prev)
         self.sample_head_dim = sample_head_dim
-        self.sample_embeddings_table_h = self.embeddings_table_h[:,:sample_head_dim]
-        self.sample_embeddings_table_v = self.embeddings_table_v[:,:sample_head_dim]
+        if sample_head_dim_prev is None:
+            self.sample_embeddings_table_h = self.embeddings_table_h[:, :sample_head_dim]
+            self.sample_embeddings_table_v = self.embeddings_table_v[:, :sample_head_dim]
+        else:
+            # frozen: 첫 sample_head_dim_prev columns, trainable: 나머지 columns up to sample_head_dim
+            # frozen_h = nn.Parameter(self.embeddings_table_h[:, :sample_head_dim_prev].clone(), requires_grad=False)
+            # trainable_h = nn.Parameter(self.embeddings_table_h[:, sample_head_dim_prev:sample_head_dim].clone(), requires_grad=True)
+            # self.sample_embeddings_table_h = torch.cat([frozen_h, trainable_h], dim=1)
+            
+            # frozen_v = nn.Parameter(self.embeddings_table_v[:, :sample_head_dim_prev].clone(), requires_grad=False)
+            # trainable_v = nn.Parameter(self.embeddings_table_v[:, sample_head_dim_prev:sample_head_dim].clone(), requires_grad=True)
+            # self.sample_embeddings_table_v = torch.cat([frozen_v, trainable_v], dim=1)
+            frozen_h = self.embeddings_table_h[:, :sample_head_dim_prev].detach()
+            trainable_h = self.embeddings_table_h[:, sample_head_dim_prev:sample_head_dim]
+            self.sample_embeddings_table_h = torch.cat([frozen_h, trainable_h], dim=1)
+
+            frozen_v = self.embeddings_table_v[:, :sample_head_dim_prev].detach()
+            trainable_v = self.embeddings_table_v[:, sample_head_dim_prev:sample_head_dim]
+            self.sample_embeddings_table_v = torch.cat([frozen_v, trainable_v], dim=1)
+
 
     def calc_sampled_param_num(self):
         return self.sample_embeddings_table_h.numel() + self.sample_embeddings_table_v.numel()
@@ -92,15 +111,27 @@ class AttentionSuper(nn.Module):
         self.sample_scale = None
         self.sample_in_embed_dim = None
 
+        self.sample_qk_embed_dim_prev = None
+        self.sample_v_embed_dim_prev = None
+        self.sample_num_heads_prev = None
+        self.sample_scale_prev = None
+        self.sample_in_embed_dim_prev = None
+
         self.proj = LinearSuper(super_embed_dim, super_embed_dim)
 
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj_drop = nn.Dropout(proj_drop)
 
-    def set_sample_config(self, sample_q_embed_dim=None, sample_num_heads=None, sample_in_embed_dim=None):
+    def set_sample_config(self, sample_q_embed_dim=None, sample_num_heads=None, sample_in_embed_dim=None,
+                          sample_q_embed_dim_prev=None, sample_num_heads_prev=None, sample_in_embed_dim_prev=None):
+        # print("_prev None check AttensionSuper : ", sample_q_embed_dim_prev, sample_num_heads_prev, sample_in_embed_dim_prev)
 
         self.sample_in_embed_dim = sample_in_embed_dim
         self.sample_num_heads = sample_num_heads
+
+        self.sample_in_embed_dim_prev = sample_in_embed_dim_prev
+        self.sample_num_heads_prev = sample_num_heads_prev
+
         if not self.change_qkv:
             self.sample_qk_embed_dim = self.super_embed_dim
             self.sample_scale = (sample_in_embed_dim // self.sample_num_heads) ** -0.5
@@ -109,11 +140,58 @@ class AttentionSuper(nn.Module):
             self.sample_qk_embed_dim = sample_q_embed_dim
             self.sample_scale = (self.sample_qk_embed_dim // self.sample_num_heads) ** -0.5
 
-        self.qkv.set_sample_config(sample_in_dim=sample_in_embed_dim, sample_out_dim=3*self.sample_qk_embed_dim)
-        self.proj.set_sample_config(sample_in_dim=self.sample_qk_embed_dim, sample_out_dim=sample_in_embed_dim)
+
+        # sample_scale_prev는 사실 정의가 필요 없는거같음.
+        if not self.change_qkv:
+            # super_embed_dim이 None이면 sample_qk_embed_dim_prev는 None으로 설정
+            self.sample_qk_embed_dim_prev = self.super_embed_dim if self.super_embed_dim is not None else None
+
+            # sample_in_embed_dim_prev와 self.sample_num_heads_prev가 모두 None이 아니라면 계산, 아니면 None
+            if sample_in_embed_dim_prev is not None and self.sample_num_heads_prev is not None:
+                self.sample_scale_prev = (sample_in_embed_dim_prev // self.sample_num_heads_prev) ** -0.5
+            else:
+                self.sample_scale_prev = None
+
+        else:
+            # sample_q_embed_dim_prev가 None이면 sample_qk_embed_dim_prev는 None
+            self.sample_qk_embed_dim_prev = sample_q_embed_dim_prev if sample_q_embed_dim_prev is not None else None
+
+            # sample_qk_embed_dim_prev와 self.sample_num_heads_prev가 모두 None이 아니라면 계산, 아니면 None
+            if self.sample_qk_embed_dim_prev is not None and self.sample_num_heads_prev is not None:
+                self.sample_scale_prev = (self.sample_qk_embed_dim_prev // self.sample_num_heads_prev) ** -0.5
+            else:
+                self.sample_scale_prev = None
+
+
+        self.qkv.set_sample_config(sample_in_dim=sample_in_embed_dim, sample_out_dim=3*self.sample_qk_embed_dim, sample_in_dim_prev=sample_in_embed_dim_prev, sample_out_dim_prev=(3*self.sample_qk_embed_dim_prev) if self.sample_qk_embed_dim_prev is not None else None)
+        self.proj.set_sample_config(sample_in_dim=self.sample_qk_embed_dim, sample_out_dim=sample_in_embed_dim, sample_in_dim_prev=self.sample_qk_embed_dim_prev, sample_out_dim_prev=self.sample_in_embed_dim_prev)
+        
+        #악의 근원
+        # if sample_num_heads_prev is None:
+        #     sample_num_heads_prev = sample_num_heads
+        # if self.sample_qk_embed_dim_prev is None:
+        #     self.sample_qk_embed_dim_prev = self.sample_qk_embed_dim
+
+        # 만약 둘 다 None이면, 분할 결과는 None으로 설정
+        if sample_num_heads_prev is None and self.sample_qk_embed_dim_prev is None:
+            # 둘 다 None이면 그대로 유지
+            pass
+        else:
+            # 둘 중 하나만 None이면, 해당하는 변수는 _prev가 없는 변수의 값으로 대체
+            if sample_num_heads_prev is None:
+                sample_num_heads_prev = sample_num_heads
+            if self.sample_qk_embed_dim_prev is None:
+                self.sample_qk_embed_dim_prev = self.sample_qk_embed_dim
+
+        # 둘 중 하나라도 None이면, 나눗셈 결과 대신 None을 사용
+        if self.sample_qk_embed_dim_prev is None or sample_num_heads_prev is None:
+            rel_value_prev = None
+        else:
+            rel_value_prev = self.sample_qk_embed_dim_prev // sample_num_heads_prev
+        
         if self.relative_position:
-            self.rel_pos_embed_k.set_sample_config(self.sample_qk_embed_dim // sample_num_heads)
-            self.rel_pos_embed_v.set_sample_config(self.sample_qk_embed_dim // sample_num_heads)
+            self.rel_pos_embed_k.set_sample_config(self.sample_qk_embed_dim // sample_num_heads, rel_value_prev)
+            self.rel_pos_embed_v.set_sample_config(self.sample_qk_embed_dim // sample_num_heads, rel_value_prev)
     def calc_sampled_param_num(self):
 
         return 0

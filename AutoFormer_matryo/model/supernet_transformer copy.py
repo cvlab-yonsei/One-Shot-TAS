@@ -110,7 +110,7 @@ class Vision_TransformerSuper(nn.Module):
         self.num_classes = num_classes
         self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
-    def set_sample_config(self, config: dict, config_prev: dict = None): # 이 안에 문제가 있다.
+    def set_sample_config(self, config: dict, config_prev: dict = None):
         self.sample_embed_dim = config['embed_dim']
         self.sample_mlp_ratio = config['mlp_ratio']
         self.sample_layer_num = config['layer_num']
@@ -162,12 +162,12 @@ class Vision_TransformerSuper(nn.Module):
                     sample_dropout=sample_dropout,
                     sample_attn_dropout=sample_attn_dropout,
                     sample_out_dim=self.sample_output_dim[i],
-                    sample_embed_dim_prev=self.sample_embed_dim_prev[i] if self.sample_embed_dim_prev is not None else None,
-                    sample_mlp_ratio_prev=self.sample_mlp_ratio_prev[i] if self.sample_mlp_ratio_prev is not None else None,
-                    sample_num_heads_prev=self.sample_num_heads_prev[i] if self.sample_num_heads_prev is not None else None,
-                    sample_dropout_prev=sample_dropout_prev,
-                    sample_attn_dropout_prev=sample_attn_dropout_prev,
-                    sample_out_dim_prev=self.sample_output_dim_prev[i] if self.sample_output_dim_prev is not None else None,
+                    # sample_embed_dim_prev=self.sample_embed_dim_prev[i] if self.sample_embed_dim_prev is not None else None,
+                    # sample_mlp_ratio_prev=self.sample_mlp_ratio_prev[i] if self.sample_mlp_ratio_prev is not None else None,
+                    # sample_num_heads_prev=self.sample_num_heads_prev[i] if self.sample_num_heads_prev is not None else None,
+                    # sample_dropout_prev=sample_dropout_prev,
+                    # sample_attn_dropout_prev=sample_attn_dropout_prev,
+                    # sample_out_dim_prev=self.sample_output_dim_prev[i] if self.sample_output_dim_prev is not None else None,
                 )
             # exceeds sample layer number
             else:
@@ -286,7 +286,7 @@ class TransformerEncoderLayer(nn.Module):
                       sample_num_heads_prev=None,
                       sample_dropout_prev=None,
                       sample_attn_dropout_prev=None,
-                      sample_out_dim_prev=None): # 여긴 문제 없음 
+                      sample_out_dim_prev=None):
 
         if is_identity_layer:
             self.is_identity_layer = True
