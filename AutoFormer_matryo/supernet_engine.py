@@ -10,23 +10,42 @@ from lib import utils
 import random
 import time
 
-@torch.no_grad()
-def set_arc(model, config):
-    metric_logger = utils.MetricLogger(delimiter="  ")
-
-    # switch to evaluation mode
-    model.eval()
-    model_module = unwrap_model(model)
-    model_module.set_sample_config(config=config)
-
-    return
+# def get_previous_config(config, choices):
+#     """
+#     한 단계 작은 subnet을 찾는 함수
+#     """
+#     prev_config = config.copy()
+    
+#     for key in ['embed_dim']:
+#         current_val = config[key][0]
+#         choice_list = choices[key]
+#         idx = choice_list.index(current_val)
+#         if idx > 0:
+#             prev_config[key] = [choice_list[idx - 1]] * config['layer_num']
+#         else:
+#             prev_config[key] = config[key]  # 가장 작은 경우에는 freeze 없음
+    
+#     for key in ['mlp_ratio', 'num_heads']:
+#         prev_config[key] = []
+#         for i in range(config['layer_num']):
+#             current_val = config[key][i]
+#             choice_list = choices[key]
+#             idx = choice_list.index(current_val)
+#             if idx > 0:
+#                 prev_config[key].append(choice_list[idx - 1])
+#             else:
+#                 prev_config[key].append(current_val)  # 가장 작은 경우에는 freeze 없음. current랑 똑같으면 mask 안주게 다른 함수에서 처리할거.
+    
+#     return prev_config
 
 def get_previous_config(config, choices):
     """
-    한 단계 작은 subnet을 찾는 함수
+    한 단계 작은 subnet을 찾는 함수.
+    만약 현재 config의 인자값이 이미 choices에서 가장 작은 값이면, 그 인자는 None으로 처리함.
     """
     prev_config = config.copy()
     
+    # embed_dim은 모든 layer에서 동일하다고 가정
     for key in ['embed_dim']:
         current_val = config[key][0]
         choice_list = choices[key]
@@ -34,8 +53,10 @@ def get_previous_config(config, choices):
         if idx > 0:
             prev_config[key] = [choice_list[idx - 1]] * config['layer_num']
         else:
-            prev_config[key] = config[key]  # 가장 작은 경우에는 freeze 없음
+            # 이미 가장 작은 값이면, 모든 layer에 대해 None 할당
+            prev_config[key] = [None] * config['layer_num']
     
+    # mlp_ratio와 num_heads는 각 layer마다 다를 수 있음
     for key in ['mlp_ratio', 'num_heads']:
         prev_config[key] = []
         for i in range(config['layer_num']):
@@ -45,7 +66,8 @@ def get_previous_config(config, choices):
             if idx > 0:
                 prev_config[key].append(choice_list[idx - 1])
             else:
-                prev_config[key].append(current_val)  # 가장 작은 경우에는 freeze 없음. current랑 똑같으면 mask 안주게 다른 함수에서 처리할거.
+                # 가장 작은 값이면 None 할당
+                prev_config[key].append(None)
     
     return prev_config
 
@@ -253,20 +275,20 @@ def sample_configs_curriculum(choices, epoch):
     dimensions = ['mlp_ratio', 'num_heads']
     depth = random.choice(choices['depth'])
 
-    if epoch <= 100:
+    if epoch <= 300:
         config['embed_dim'] = [192] * depth
         config['mlp_ratio'] = [3.5] * depth
         config['num_heads'] = [3] * depth
 
-    elif 101 <= epoch <= 300:
-        config['embed_dim'] = [random.choice([192, 216, 240])] * depth
-        config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[3, 2])[0] for _ in range(depth)]
-        config['num_heads'] = [random.choices([3, 4], weights=[3, 2])[0] for _ in range(depth)]
+    elif 301 <= epoch <= 400:
+        config['embed_dim'] = [random.choices([192, 216, 240], weights=[1, 4, 1])[0]] * depth
+        config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 3])[0] for _ in range(depth)]
+        config['num_heads'] = [random.choices([3, 4], weights=[1, 3])[0] for _ in range(depth)]
 
-    elif 301 <= epoch <= 500:
-        config['embed_dim'] = [random.choices([192, 216, 240], weights=[1, 1, 2])[0]] * depth
-        config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 2])[0] for _ in range(depth)]
-        config['num_heads'] = [random.choices([3, 4], weights=[1, 2])[0] for _ in range(depth)]
+    elif 401 <= epoch <= 500:
+        config['embed_dim'] = [random.choices([192, 216, 240], weights=[1, 1, 4])[0]] * depth
+        config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 5])[0] for _ in range(depth)]
+        config['num_heads'] = [random.choices([3, 4], weights=[1, 5])[0] for _ in range(depth)]
 
     config['layer_num'] = depth
     return config
@@ -306,10 +328,10 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         if mode == 'super':
             # config = sample_configs(choices=choices)
             config = sample_configs_curriculum(choices=choices, epoch=epoch)
+            prev_config = get_previous_config(config=config, choices=choices) # None 처리 잘되는거 확인
             model_module = unwrap_model(model)
-            model_module.set_sample_config(config=config)
-            prev_config = get_previous_config(config=config, choices=choices)
-            locked_masks = get_locked_masks(model, config, prev_config, choices=choices)
+            model_module.set_sample_config(config=config, config_prev=prev_config)
+            # locked_masks = get_locked_masks(model, config, prev_config, choices=choices)
 
             # for name, param in model_module.named_parameters():
             #     if param.requires_grad:
@@ -359,36 +381,15 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             print("Loss is {}, stopping training".format(loss_value))
             sys.exit(1)
 
-        optimizer.zero_grad()
+        optimizer.zero_grad()   
 
-        # AMP 사용 여부 확인
+        # this attribute is added by timm on one optimizer (adahessian)
         if amp:
             is_second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
-
-            print(help(loss_scaler))
-
-
-            # ✅ loss_scaler가 optimizer.step()까지 수행하지 않도록 need_update=False 설정
             loss_scaler(loss, optimizer, clip_grad=max_norm,
-                        parameters=model.parameters(), create_graph=is_second_order, need_update=False)
-
-            # 🔥 backward()는 수행된 상태 → 여기서 gradient 0으로 설정
-            for name, param in model.named_parameters():
-                if param.grad is not None and name in locked_masks:
-                    param.grad[locked_masks[name]] = 0
-
-            # ✅ optimizer step을 loss_scaler 내부에서 수행하지 않고, 여기서 직접 호출
-            loss_scaler._scaler.step(optimizer)
-            loss_scaler._scaler.update()
-
+                    parameters=model.parameters(), create_graph=is_second_order)
         else:
             loss.backward()
-
-            # 🔥 AMP 미사용 시, backward() 이후 gradient 0으로 설정
-            for name, param in model.named_parameters():
-                if param.grad is not None and name in locked_masks:
-                    param.grad[locked_masks[name]] = 0
-
             optimizer.step()
 
         torch.cuda.synchronize()
@@ -397,6 +398,45 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
         metric_logger.update(loss=loss_value)
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
+
+        # optimizer.zero_grad()
+
+        # # AMP 사용 여부 확인
+        # if amp:
+        #     is_second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
+
+        #     print(help(loss_scaler))
+
+
+        #     # ✅ loss_scaler가 optimizer.step()까지 수행하지 않도록 need_update=False 설정
+        #     loss_scaler(loss, optimizer, clip_grad=max_norm,
+        #                 parameters=model.parameters(), create_graph=is_second_order, need_update=False)
+
+        #     # 🔥 backward()는 수행된 상태 → 여기서 gradient 0으로 설정
+        #     for name, param in model.named_parameters():
+        #         if param.grad is not None and name in locked_masks:
+        #             param.grad[locked_masks[name]] = 0
+
+        #     # ✅ optimizer step을 loss_scaler 내부에서 수행하지 않고, 여기서 직접 호출
+        #     loss_scaler._scaler.step(optimizer)
+        #     loss_scaler._scaler.update()
+
+        # else:
+        #     loss.backward()
+
+        #     # 🔥 AMP 미사용 시, backward() 이후 gradient 0으로 설정
+        #     for name, param in model.named_parameters():
+        #         if param.grad is not None and name in locked_masks:
+        #             param.grad[locked_masks[name]] = 0
+
+        #     optimizer.step()
+
+        # torch.cuda.synchronize()
+        # if model_ema is not None:
+        #     model_ema.update(model)
+
+        # metric_logger.update(loss=loss_value)
+        # metric_logger.update(lr=optimizer.param_groups[0]["lr"])
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()

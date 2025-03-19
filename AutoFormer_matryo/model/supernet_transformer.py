@@ -47,6 +47,17 @@ class Vision_TransformerSuper(nn.Module):
         self.sample_dropout = None
         self.sample_output_dim = None
 
+        # configs_prev for the sampled subTransformer
+        self.sample_embed_dim_prev = None
+        self.sample_mlp_ratio_prev = None
+        self.sample_layer_num_prev = None
+        self.sample_num_heads_prev = None
+        self.sample_dropout_prev = None
+        self.sample_out_dim_prev = None
+        self.sample_attn_dropout_prev = None
+        self.sample_output_dim_prev = None
+
+
         self.blocks = nn.ModuleList()
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
 
@@ -99,32 +110,71 @@ class Vision_TransformerSuper(nn.Module):
         self.num_classes = num_classes
         self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
-    def set_sample_config(self, config: dict):
+    def set_sample_config(self, config: dict, config_prev: dict = None):
         self.sample_embed_dim = config['embed_dim']
         self.sample_mlp_ratio = config['mlp_ratio']
         self.sample_layer_num = config['layer_num']
         self.sample_num_heads = config['num_heads']
+        self.sample_embed_dim_prev = None
+        self.sample_mlp_ratio_prev = None
+        self.sample_layer_num_prev = None
+        self.sample_num_heads_prev = None
+
+        if config_prev is not None:
+            self.sample_embed_dim_prev = config_prev['embed_dim']
+            self.sample_mlp_ratio_prev = config_prev['mlp_ratio']
+            self.sample_layer_num_prev = config_prev['layer_num']
+            self.sample_num_heads_prev = config_prev['num_heads']
+
+
         self.sample_dropout = calc_dropout(self.super_dropout, self.sample_embed_dim[0], self.super_embed_dim)
-        self.patch_embed_super.set_sample_config(self.sample_embed_dim[0])
+        self.patch_embed_super.set_sample_config(self.sample_embed_dim[0], self.sample_embed_dim_prev[0] if self.sample_embed_dim_prev is not None else None)
         self.sample_output_dim = [out_dim for out_dim in self.sample_embed_dim[1:]] + [self.sample_embed_dim[-1]]
+
+        self.sample_dropout_prev = (
+            calc_dropout(self.super_dropout, self.sample_embed_dim_prev[0], self.super_embed_dim)
+            if self.sample_embed_dim_prev is not None and self.sample_embed_dim_prev[0] is not None
+            else None)
+
+        self.sample_output_dim_prev = [out_dim for out_dim in self.sample_embed_dim_prev[1:]] + [self.sample_embed_dim_prev[-1]]  if self.sample_embed_dim_prev is not None else None
+
         for i, blocks in enumerate(self.blocks):
             # not exceed sample layer number
             if i < self.sample_layer_num:
                 sample_dropout = calc_dropout(self.super_dropout, self.sample_embed_dim[i], self.super_embed_dim)
                 sample_attn_dropout = calc_dropout(self.super_attn_dropout, self.sample_embed_dim[i], self.super_embed_dim)
-                blocks.set_sample_config(is_identity_layer=False,
-                                        sample_embed_dim=self.sample_embed_dim[i],
-                                        sample_mlp_ratio=self.sample_mlp_ratio[i],
-                                        sample_num_heads=self.sample_num_heads[i],
-                                        sample_dropout=sample_dropout,
-                                        sample_out_dim=self.sample_output_dim[i],
-                                        sample_attn_dropout=sample_attn_dropout)
+
+                sample_dropout_prev = (
+                    calc_dropout(self.super_dropout, self.sample_embed_dim_prev[i], self.super_embed_dim)
+                    if self.sample_embed_dim_prev is not None and self.sample_embed_dim_prev[i] is not None
+                    else None
+                )
+                sample_attn_dropout_prev = (
+                    calc_dropout(self.super_attn_dropout, self.sample_embed_dim_prev[i], self.super_embed_dim)
+                    if self.sample_embed_dim_prev is not None and self.sample_embed_dim_prev[i] is not None
+                    else None
+                )
+                blocks.set_sample_config(
+                    is_identity_layer=False,
+                    sample_embed_dim=self.sample_embed_dim[i],
+                    sample_mlp_ratio=self.sample_mlp_ratio[i],
+                    sample_num_heads=self.sample_num_heads[i],
+                    sample_dropout=sample_dropout,
+                    sample_attn_dropout=sample_attn_dropout,
+                    sample_out_dim=self.sample_output_dim[i],
+                    sample_embed_dim_prev=self.sample_embed_dim_prev[i] if self.sample_embed_dim_prev is not None else None,
+                    sample_mlp_ratio_prev=self.sample_mlp_ratio_prev[i] if self.sample_mlp_ratio_prev is not None else None,
+                    sample_num_heads_prev=self.sample_num_heads_prev[i] if self.sample_num_heads_prev is not None else None,
+                    sample_dropout_prev=sample_dropout_prev,
+                    sample_attn_dropout_prev=sample_attn_dropout_prev,
+                    sample_out_dim_prev=self.sample_output_dim_prev[i] if self.sample_output_dim_prev is not None else None,
+                )
             # exceeds sample layer number
             else:
                 blocks.set_sample_config(is_identity_layer=True)
         if self.pre_norm:
-            self.norm.set_sample_config(self.sample_embed_dim[-1])
-        self.head.set_sample_config(self.sample_embed_dim[-1], self.num_classes)
+            self.norm.set_sample_config(self.sample_embed_dim[-1], self.sample_embed_dim_prev[-1] if self.sample_embed_dim_prev is not None else None)
+        self.head.set_sample_config(self.sample_embed_dim[-1], self.num_classes, self.sample_embed_dim_prev[-1] if self.sample_embed_dim_prev is not None else None, self.num_classes)
 
     def get_sampled_params_numel(self, config):
         self.set_sample_config(config)
@@ -205,6 +255,15 @@ class TransformerEncoderLayer(nn.Module):
         self.sample_dropout = None
         self.sample_attn_dropout = None
 
+        # pref value
+        self.sample_embed_dim_prev = None
+        self.sample_mlp_ratio_prev = None
+        self.sample_num_heads_prev = None
+        self.sample_dropout_prev = None
+        self.sample_attn_dropout_prev = None
+        self.sample_out_dim_prev = None
+        self.sample_ffn_embed_dim_this_layer_prev = None
+
         self.is_identity_layer = None
         self.attn = AttentionSuper(
             dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop,
@@ -222,7 +281,12 @@ class TransformerEncoderLayer(nn.Module):
         self.fc2 = LinearSuper(super_in_dim=self.super_ffn_embed_dim_this_layer, super_out_dim=self.super_embed_dim)
 
 
-    def set_sample_config(self, is_identity_layer, sample_embed_dim=None, sample_mlp_ratio=None, sample_num_heads=None, sample_dropout=None, sample_attn_dropout=None, sample_out_dim=None):
+    def set_sample_config(self, is_identity_layer, sample_embed_dim=None, sample_mlp_ratio=None, sample_num_heads=None, sample_dropout=None, sample_attn_dropout=None, sample_out_dim=None, sample_embed_dim_prev=None,
+                      sample_mlp_ratio_prev=None,
+                      sample_num_heads_prev=None,
+                      sample_dropout_prev=None,
+                      sample_attn_dropout_prev=None,
+                      sample_out_dim_prev=None):
 
         if is_identity_layer:
             self.is_identity_layer = True
@@ -238,14 +302,41 @@ class TransformerEncoderLayer(nn.Module):
 
         self.sample_dropout = sample_dropout
         self.sample_attn_dropout = sample_attn_dropout
-        self.attn_layer_norm.set_sample_config(sample_embed_dim=self.sample_embed_dim)
 
-        self.attn.set_sample_config(sample_q_embed_dim=self.sample_num_heads_this_layer*64, sample_num_heads=self.sample_num_heads_this_layer, sample_in_embed_dim=self.sample_embed_dim)
+        # 저장된 _prev 인자들 (추후 가중치 분리 등의 freeze 로직에 활용할 수 있음)
+        
+        # 악의 원인
+        # if sample_embed_dim_prev is None:
+        #     sample_embed_dim_prev = sample_embed_dim
+        # if sample_mlp_ratio_prev is None:
+        #     sample_mlp_ratio_prev = sample_mlp_ratio
 
-        self.fc1.set_sample_config(sample_in_dim=self.sample_embed_dim, sample_out_dim=self.sample_ffn_embed_dim_this_layer)
-        self.fc2.set_sample_config(sample_in_dim=self.sample_ffn_embed_dim_this_layer, sample_out_dim=self.sample_out_dim)
+        self.sample_embed_dim_prev = sample_embed_dim_prev
+        self.sample_mlp_ratio_prev = sample_mlp_ratio_prev
+        self.sample_num_heads_prev = sample_num_heads_prev
+        self.sample_dropout_prev = sample_dropout_prev
+        self.sample_attn_dropout_prev = sample_attn_dropout_prev
+        self.sample_out_dim_prev = sample_out_dim_prev
 
-        self.ffn_layer_norm.set_sample_config(sample_embed_dim=self.sample_embed_dim)
+        if sample_embed_dim_prev is None and sample_mlp_ratio_prev is None:
+            self.sample_ffn_embed_dim_this_layer_prev = None
+        else:
+            embed_dim_val = sample_embed_dim_prev if sample_embed_dim_prev is not None else sample_embed_dim
+            mlp_ratio_val = sample_mlp_ratio_prev if sample_mlp_ratio_prev is not None else sample_mlp_ratio
+            self.sample_ffn_embed_dim_this_layer_prev = int(embed_dim_val * mlp_ratio_val)
+
+
+        self.attn_layer_norm.set_sample_config(sample_embed_dim=self.sample_embed_dim, sample_embed_dim_prev=sample_embed_dim_prev)
+
+        self.attn.set_sample_config(sample_q_embed_dim=self.sample_num_heads_this_layer*64, sample_num_heads=self.sample_num_heads_this_layer, sample_in_embed_dim=self.sample_embed_dim,
+                                    sample_q_embed_dim_prev=(self.sample_num_heads_prev * 64) if self.sample_num_heads_prev is not None else None, sample_num_heads_prev=self.sample_num_heads_prev, sample_in_embed_dim_prev=self.sample_embed_dim_prev)
+
+        self.fc1.set_sample_config(sample_in_dim=self.sample_embed_dim, sample_out_dim=self.sample_ffn_embed_dim_this_layer,
+                                   sample_in_dim_prev=self.sample_embed_dim_prev, sample_out_dim_prev=self.sample_ffn_embed_dim_this_layer_prev)
+        self.fc2.set_sample_config(sample_in_dim=self.sample_ffn_embed_dim_this_layer, sample_out_dim=self.sample_out_dim,
+                                   sample_in_dim_prev=self.sample_ffn_embed_dim_this_layer_prev, sample_out_dim_prev=self.sample_out_dim_prev)
+
+        self.ffn_layer_norm.set_sample_config(sample_embed_dim=self.sample_embed_dim, sample_embed_dim_prev=sample_embed_dim_prev)
 
 
     def forward(self, x):
