@@ -45,65 +45,142 @@ def get_previous_config(config, choices):
             if idx > 0:
                 prev_config[key].append(choice_list[idx - 1])
             else:
-                prev_config[key].append(current_val)  # 가장 작은 경우에는 freeze 없음
+                prev_config[key].append(current_val)  # 가장 작은 경우에는 freeze 없음. current랑 똑같으면 mask 안주게 다른 함수에서 처리할거.
     
     return prev_config
 
 def get_locked_masks(model, current_config, prev_config, choices):
     """
-    Gradient를 0으로 설정할 마스크 생성
+    Gradient를 0으로 설정할 마스크 생성 (weight와 bias만 처리)
     """
     locked_masks = {}
     for name, param in model.named_parameters():
+        if 'weight' not in name and 'bias' not in name:
+            continue  # weight, bias가 아닌 경우 제외
+        
         parts = name.split('.')
         
-        if 'embed' in name:
-            if current_config['embed_dim'][0] == min(choices['embed_dim']):
-                continue  # 가장 작은 embed_dim이면 freeze 없음
+        if 'patch_embed_super.proj.weight' in name:
             prev_embed_dim = prev_config['embed_dim'][0]
+            cur_embed_dim = current_config['embed_dim'][0]
+            if prev_embed_dim == cur_embed_dim:
+                continue  # 값이 같으면 freeze 없음
+            if param.shape[0] > prev_embed_dim:
+                mask = torch.zeros_like(param, dtype=torch.bool)
+                mask[:prev_embed_dim, :, :, :] = True  # 앞부분만 freeze
+                locked_masks[name] = mask
+        
+        elif 'patch_embed_super.proj.bias' in name:
+            prev_embed_dim = prev_config['embed_dim'][0]
+            cur_embed_dim = current_config['embed_dim'][0]
+            if prev_embed_dim == cur_embed_dim:
+                continue  # 값이 같으면 freeze 없음
             if param.shape[0] > prev_embed_dim:
                 mask = torch.zeros_like(param, dtype=torch.bool)
                 mask[:prev_embed_dim] = True
                 locked_masks[name] = mask
         
-        elif 'attn' in name and 'qkv' in name:
-            if 'blocks' in parts:
-                layer_idx = int(parts[parts.index('blocks') + 1])
-                if layer_idx >= len(current_config['num_heads']):
-                    continue  # layer_idx 초과 시 continue
-                if current_config['num_heads'][layer_idx] == min(choices['num_heads']):
-                    continue  # 가장 작은 num_heads이면 freeze 없음
-                if layer_idx < len(prev_config['num_heads']):
-                    prev_heads = prev_config['num_heads'][layer_idx]
-                    head_dim = param.shape[0] // prev_config['num_heads'][layer_idx]
-                    freeze_heads = prev_heads * head_dim
-                    mask = torch.zeros_like(param, dtype=torch.bool)
-                    mask[:freeze_heads] = True
-                    locked_masks[name] = mask
+        elif 'attn.qkv.weight' in name:
+            layer_idx = int(parts[parts.index('blocks') + 1])
+            if layer_idx >= len(prev_config['num_heads']):
+                continue
+            prev_heads = prev_config['num_heads'][layer_idx]
+            cur_heads = current_config['num_heads'][layer_idx]
+            prev_embed_dim = prev_config['embed_dim'][layer_idx]
+            cur_embed_dim = current_config['embed_dim'][layer_idx]
+            if prev_heads == cur_heads and prev_embed_dim == cur_embed_dim:
+                continue
+            # head_dim = 192 // prev_heads  # 192 반영
+            # freeze_dim = head_dim * prev_heads
+            freeze_dim = 192 * prev_heads
+            mask = torch.zeros_like(param, dtype=torch.bool)
+            mask[:freeze_dim, :prev_embed_dim] = True
+            locked_masks[name] = mask
         
-        elif 'fc1' in name or 'fc2' in name:
-            if 'blocks' in parts:
-                layer_idx = int(parts[parts.index('blocks') + 1])
-                if layer_idx >= len(current_config['mlp_ratio']):
-                    continue  # layer_idx 초과 시 continue
-                if current_config['mlp_ratio'][layer_idx] == min(choices['mlp_ratio']):
-                    continue  # 가장 작은 mlp_ratio이면 freeze 없음
-                if layer_idx < len(prev_config['mlp_ratio']):
-                    prev_mlp_ratio = prev_config['mlp_ratio'][layer_idx]
-                    cur_mlp_ratio = current_config['mlp_ratio'][layer_idx]
-                    
-                    if len(param.shape) == 2:
-                        prev_dim = int(param.shape[1] * (prev_mlp_ratio / cur_mlp_ratio))
-                        mask = torch.zeros_like(param, dtype=torch.bool)
-                        mask[:, :prev_dim] = True
-                    elif len(param.shape) == 1:
-                        prev_dim = int(param.shape[0] * (prev_mlp_ratio / cur_mlp_ratio))
-                        mask = torch.zeros_like(param, dtype=torch.bool)
-                        mask[:prev_dim] = True
-                    else:
-                        continue  # 예외 처리: shape이 예상과 다를 경우 skip
-                    
-                    locked_masks[name] = mask
+        elif 'attn.qkv.bias' in name:
+            layer_idx = int(parts[parts.index('blocks') + 1])
+            if layer_idx >= len(prev_config['num_heads']):
+                continue
+            prev_heads = prev_config['num_heads'][layer_idx]
+            cur_heads = current_config['num_heads'][layer_idx]
+            if prev_heads == cur_heads:
+                continue
+            freeze_dim = 192 * prev_heads  # 192 반영
+            mask = torch.zeros_like(param, dtype=torch.bool)
+            mask[:freeze_dim] = True
+            locked_masks[name] = mask
+        
+        elif 'attn.proj.weight' in name:
+            layer_idx = int(parts[parts.index('blocks') + 1])
+            if layer_idx >= len(prev_config['num_heads']) or layer_idx >= len(prev_config['embed_dim']):
+                continue
+            prev_embed_dim = prev_config['embed_dim'][layer_idx]
+            cur_embed_dim = current_config['embed_dim'][layer_idx]
+            prev_heads = prev_config['num_heads'][layer_idx]
+            cur_heads = current_config['num_heads'][layer_idx]
+            if prev_embed_dim == cur_embed_dim and prev_heads == cur_heads:
+                continue
+            head_dim = 64  # 64 반영
+            freeze_dim = prev_heads * head_dim
+            mask = torch.zeros_like(param, dtype=torch.bool)
+            mask[:prev_embed_dim, :freeze_dim] = True
+            locked_masks[name] = mask
+        
+        elif 'fc1.weight' in name:
+            layer_idx = int(parts[parts.index('blocks') + 1])
+            if layer_idx >= len(prev_config['mlp_ratio']):
+                continue
+            prev_mlp_ratio = prev_config['mlp_ratio'][layer_idx]
+            cur_mlp_ratio = current_config['mlp_ratio'][layer_idx]
+            prev_embed_dim = prev_config['embed_dim'][layer_idx]
+            cur_embed_dim = current_config['embed_dim'][layer_idx]
+            if prev_mlp_ratio == cur_mlp_ratio and prev_embed_dim == cur_embed_dim:
+                continue
+            prev_dim = int(prev_mlp_ratio * prev_embed_dim)
+            mask = torch.zeros_like(param, dtype=torch.bool)
+            mask[:prev_dim, :prev_embed_dim] = True
+            locked_masks[name] = mask
+        
+        elif 'fc2.weight' in name:
+            layer_idx = int(parts[parts.index('blocks') + 1])
+            if layer_idx >= len(prev_config['mlp_ratio']):
+                continue
+            prev_mlp_ratio = prev_config['mlp_ratio'][layer_idx]
+            cur_mlp_ratio = current_config['mlp_ratio'][layer_idx]
+            prev_embed_dim = prev_config['embed_dim'][layer_idx]
+            cur_embed_dim = current_config['embed_dim'][layer_idx]
+            if prev_mlp_ratio == cur_mlp_ratio and prev_embed_dim == cur_embed_dim:
+                continue
+            prev_dim = int(prev_mlp_ratio * prev_embed_dim)
+            mask = torch.zeros_like(param, dtype=torch.bool)
+            mask[:prev_embed_dim, :prev_dim] = True
+            locked_masks[name] = mask
+
+        elif 'attn.proj.bias' in name or 'attn_layer_norm.weight' in name or 'attn_layer_norm.bias' in name or \
+        'ffn_layer_norm.weight' in name or 'ffn_layer_norm.bias' in name or 'fc2.bias' in name:
+            prev_embed_dim = prev_config['embed_dim'][0]
+            cur_embed_dim = current_config['embed_dim'][0]
+            if prev_embed_dim == cur_embed_dim:
+                continue  # 값이 같으면 freeze 없음
+            mask = torch.zeros_like(param, dtype=torch.bool)
+            mask[:prev_embed_dim] = True
+            locked_masks[name] = mask
+
+        elif 'fc1.bias' in name:
+            layer_idx = int(name.split('.')[2])  # 블록 인덱스 추출
+            if layer_idx >= len(prev_config['mlp_ratio']):
+                continue
+            prev_mlp_ratio = prev_config['mlp_ratio'][layer_idx]
+            cur_mlp_ratio = current_config['mlp_ratio'][layer_idx]
+            prev_embed_dim = prev_config['embed_dim'][layer_idx]
+            cur_embed_dim = current_config['embed_dim'][layer_idx]
+            if prev_mlp_ratio == cur_mlp_ratio and prev_embed_dim == cur_embed_dim:
+                continue
+            prev_dim = int(prev_mlp_ratio * prev_embed_dim)
+            mask = torch.zeros_like(param, dtype=torch.bool)
+            mask[:prev_dim] = True
+            locked_masks[name] = mask
+    
     return locked_masks
 
 def freeze_weights(model, current_config, prev_config):
@@ -211,7 +288,9 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             locked_masks = get_locked_masks(model, config, prev_config, choices=choices)
 
             # for name, param in model_module.named_parameters():
-            #     print(name, param.shape)
+            #     if param.requires_grad:
+            #         print(name, param.shape)
+
 
             # print("config : ", config)
             # for layer in model.modules():
