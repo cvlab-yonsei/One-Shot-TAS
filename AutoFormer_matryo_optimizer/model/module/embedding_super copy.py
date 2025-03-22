@@ -5,7 +5,6 @@ from model.utils import to_2tuple
 import numpy as np
 
 class Conv2dSuper(nn.Conv2d):
-    
     @property
     def weight(self):
         # 만약 self.w1이 빈 텐서라면, 그냥 self.w2를 반환

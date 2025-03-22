@@ -350,7 +350,14 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             
             # 이후 for 루프 내에서 사용
             # current_lr = lr_scheduler.get_last_lr()[0]
-            current_lr = 0.0001 - (0.0001-0.00001)*(epoch/500)
+
+            # current_lr = 0.001 - (0.001-0.00001)*(epoch/500)
+            if epoch < 20:
+                # 워밍업: 0~20 epoch에서 1e-6에서 1e-3로 증가
+                current_lr = 1e-6 + (1e-3 - 1e-6) * (epoch / 20)
+            else:
+                # 디케이: 20~500 epoch에서 1e-3에서 1e-5로 감소
+                current_lr = 1e-3 - (1e-3 - 1e-5) * ((epoch - 20) / (500 - 20))
 
             # 새 optimizer의 모든 파라미터 그룹에 현재 lr을 설정합니다.
             for group in optimizer.param_groups:

@@ -13,6 +13,16 @@ class LayerNormSuper(torch.nn.LayerNorm):
         self.sample_embed_dim = None
         self.sample_embed_dim_prev = None
 
+        self.weight.requires_grad = False
+
+        self.w1 = nn.Parameter(torch.rand(0), requires_grad=False)
+        self.w2 = nn.Parameter(torch.rand(super_embed_dim), requires_grad=True)
+        self.w3 = nn.Parameter(torch.rand(0), requires_grad=False)
+
+        self.bias1 = nn.Parameter(torch.rand(0), requires_grad=False)
+        self.bias2 = nn.Parameter(torch.rand(super_embed_dim), requires_grad=True)
+        self.bias3 = nn.Parameter(torch.rand(0), requires_grad=False)
+
         self.samples = {}
         self.profiling = False
 
@@ -25,19 +35,46 @@ class LayerNormSuper(torch.nn.LayerNorm):
         return self.samples
 
     def _sample_parameters(self):
+        full_weight = torch.cat([self.w1, self.w2], dim=0)
+        full_weight_out = torch.cat([full_weight, self.w3], dim=0)
+        
+        full_bias = torch.cat([self.bias1, self.bias2], dim=0)
+        full_bias_out = torch.cat([full_bias, self.bias3], dim=0)
+
         if self.sample_embed_dim_prev is None:
+            new_w1 = torch.empty(0, device=self.weight.device)
+            new_w2 = full_weight_out[:self.sample_embed_dim]
+            new_w3 = full_weight_out[self.sample_embed_dim:self.super_embed_dim]
+            self.w1 = nn.Parameter(new_w1, requires_grad=False)
+            self.w2 = nn.Parameter(new_w2, requires_grad=True)
+            self.w3 = nn.Parameter(new_w3, requires_grad=False)
+
+            new_bias1 = torch.empty(0, device=self.bias.device)
+            new_bias2 = full_bias_out[:self.sample_embed_dim]
+            new_bias3 = full_bias_out[self.sample_embed_dim:self.super_embed_dim]
+            self.bias1 = nn.Parameter(new_bias1, requires_grad=False)
+            self.bias2 = nn.Parameter(new_bias2, requires_grad=True)
+            self.bias3 = nn.Parameter(new_bias3, requires_grad=False)
+
             self.samples['weight'] = self.weight[:self.sample_embed_dim]
             self.samples['bias'] = self.bias[:self.sample_embed_dim]
         else:
-            # frozen 부분: 앞 sample_embed_dim_prev elements (clone해서 독립적으로 생성)
-            # frozen_weight = nn.Parameter(self.weight[:self.sample_embed_dim_prev].clone(), requires_grad=False)
-            # trainable_weight = nn.Parameter(self.weight[self.sample_embed_dim_prev:self.sample_embed_dim].clone(), requires_grad=True)
-            # self.samples['weight'] = torch.cat([frozen_weight, trainable_weight], dim=0)
-            
-            # frozen_bias = nn.Parameter(self.bias[:self.sample_embed_dim_prev].clone(), requires_grad=False)
-            # trainable_bias = nn.Parameter(self.bias[self.sample_embed_dim_prev:self.sample_embed_dim].clone(), requires_grad=True)
-            # self.samples['bias'] = torch.cat([frozen_bias, trainable_bias], dim=0)
-            
+            new_w1 = full_weight_out[:self.sample_embed_dim_prev].detach()
+            new_w2 = full_weight_out[self.sample_embed_dim_prev:self.sample_embed_dim]
+            new_w3 = full_weight_out[self.sample_embed_dim:self.super_embed_dim].detach()
+
+            self.w1 = nn.Parameter(new_w1, requires_grad=False)
+            self.w2 = nn.Parameter(new_w2, requires_grad=True)
+            self.w3 = nn.Parameter(new_w3, requires_grad=False)
+
+            new_bias1 = full_bias_out[:self.sample_embed_dim_prev].detach()
+            new_bias2 = full_bias_out[self.sample_embed_dim_prev:self.sample_embed_dim]
+            new_bias3 = full_bias_out[self.sample_embed_dim:self.super_embed_dim].detach()
+
+            self.bias1 = nn.Parameter(new_bias1, requires_grad=False)
+            self.bias2 = nn.Parameter(new_bias2, requires_grad=True)
+            self.bias3 = nn.Parameter(new_bias3, requires_grad=False)
+
             frozen_weight = self.weight[:self.sample_embed_dim_prev].detach()
             trainable_weight = self.weight[self.sample_embed_dim_prev:self.sample_embed_dim]
             self.samples['weight'] = torch.cat([frozen_weight, trainable_weight], dim=0)
@@ -52,9 +89,26 @@ class LayerNormSuper(torch.nn.LayerNorm):
         self.sample_embed_dim_prev = sample_embed_dim_prev
         self._sample_parameters()
 
+    @property
+    def weight(self):
+        # frozen bias가 없으면, bias1은 빈 텐서.
+        if self.w1.numel() == 0:
+            return self.w2
+        else:
+            return torch.cat([self.w1, self.w2], dim=0)
+
+    @property
+    def bias(self):
+        # frozen bias가 없으면, bias1은 빈 텐서.
+        if self.bias1.numel() == 0:
+            return self.bias2
+        else:
+            return torch.cat([self.bias1, self.bias2], dim=0)
+
     def forward(self, x):
         self.sample_parameters()
-        return F.layer_norm(x, (self.sample_embed_dim,), weight=self.samples['weight'], bias=self.samples['bias'], eps=self.eps)
+        return F.layer_norm(x, (self.sample_embed_dim,), weight=self.weight, bias=self.bias, eps=self.eps)
+        # return F.layer_norm(x, (self.sample_embed_dim,), weight=self.samples['weight'], bias=self.samples['bias'], eps=self.eps)
 
     def calc_sampled_param_num(self):
         assert 'weight' in self.samples.keys()

@@ -35,17 +35,6 @@ class PatchembedSuper(nn.Module):
             self.sampled_weight = self.proj.weight[:sample_embed_dim, ...]
             self.sampled_bias = self.proj.bias[:sample_embed_dim, ...]
         else:
-            # # frozen: 좌측 영역 (channels: 0 ~ sample_embed_dim_prev)
-            # frozen_weight = nn.Parameter(self.proj.weight[:sample_embed_dim_prev, ...].clone(), requires_grad=False)
-            # # trainable: 나머지 영역 (channels: sample_embed_dim_prev ~ sample_embed_dim)
-            # trainable_weight = nn.Parameter(self.proj.weight[sample_embed_dim_prev:sample_embed_dim, ...].clone(), requires_grad=True)
-            # self.sampled_weight = torch.cat([frozen_weight, trainable_weight], dim=0)
-            
-            # frozen_bias = nn.Parameter(self.proj.bias[:sample_embed_dim_prev].clone(), requires_grad=False)
-            # trainable_bias = nn.Parameter(self.proj.bias[sample_embed_dim_prev:sample_embed_dim].clone(), requires_grad=True)
-            # self.sampled_bias = torch.cat([frozen_bias, trainable_bias], dim=0)
-            # frozen: 좌측 영역 (channels: 0 ~ sample_embed_dim_prev)
-
             frozen_weight = self.proj.weight[:sample_embed_dim_prev, ...].detach()
             # trainable: 나머지 영역 (channels: sample_embed_dim_prev ~ sample_embed_dim)
             trainable_weight = self.proj.weight[sample_embed_dim_prev:sample_embed_dim, ...]

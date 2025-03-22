@@ -29,15 +29,6 @@ class LayerNormSuper(torch.nn.LayerNorm):
             self.samples['weight'] = self.weight[:self.sample_embed_dim]
             self.samples['bias'] = self.bias[:self.sample_embed_dim]
         else:
-            # frozen 부분: 앞 sample_embed_dim_prev elements (clone해서 독립적으로 생성)
-            # frozen_weight = nn.Parameter(self.weight[:self.sample_embed_dim_prev].clone(), requires_grad=False)
-            # trainable_weight = nn.Parameter(self.weight[self.sample_embed_dim_prev:self.sample_embed_dim].clone(), requires_grad=True)
-            # self.samples['weight'] = torch.cat([frozen_weight, trainable_weight], dim=0)
-            
-            # frozen_bias = nn.Parameter(self.bias[:self.sample_embed_dim_prev].clone(), requires_grad=False)
-            # trainable_bias = nn.Parameter(self.bias[self.sample_embed_dim_prev:self.sample_embed_dim].clone(), requires_grad=True)
-            # self.samples['bias'] = torch.cat([frozen_bias, trainable_bias], dim=0)
-            
             frozen_weight = self.weight[:self.sample_embed_dim_prev].detach()
             trainable_weight = self.weight[self.sample_embed_dim_prev:self.sample_embed_dim]
             self.samples['weight'] = torch.cat([frozen_weight, trainable_weight], dim=0)

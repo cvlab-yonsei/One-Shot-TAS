@@ -22,6 +22,8 @@ class LinearSuper(nn.Linear):
         self.weight_trainable_top_right = None  # 학습 가능한 weight (오른쪽 위)
         self.weight_trainable_bottom = None  # 학습 가능한 weight (아래쪽 전체)
 
+        self.weight.requires_grad = False
+
         self.w1 = nn.Parameter(torch.randn(super_out_dim//2, super_in_dim//2), requires_grad=False)
         self.w2 = nn.Parameter(torch.randn(super_out_dim//2, super_in_dim//4), requires_grad=True)
         # self.w3 = nn.Parameter(torch.randn(0, super_in_dim), requires_grad=True)
