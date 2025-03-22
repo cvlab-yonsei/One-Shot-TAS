@@ -3,6 +3,8 @@ import sys
 from typing import Iterable, Optional
 from timm.utils.model import unwrap_model
 import torch
+from timm.scheduler import create_scheduler
+from timm.optim import create_optimizer
 
 from timm.data import Mixup
 from timm.utils import accuracy, ModelEma
@@ -277,9 +279,9 @@ def sample_configs_curriculum(choices, epoch):
     depth = 14
 
     if epoch <= 1000:
-        config['embed_dim'] = [240] * depth
-        config['mlp_ratio'] = [4.0] * depth
-        config['num_heads'] = [4] * depth
+        config['embed_dim'] = [192] * depth
+        config['mlp_ratio'] = [3.5] * depth
+        config['num_heads'] = [3] * depth
 
     # elif 301 <= epoch <= 400:
     #     config['embed_dim'] = [random.choices([192, 216, 240], weights=[1, 4, 1])[0]] * depth
@@ -299,7 +301,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     device: torch.device, epoch: int, loss_scaler, max_norm: float = 0,
                     model_ema: Optional[ModelEma] = None, mixup_fn: Optional[Mixup] = None,
                     amp: bool = True, teacher_model: torch.nn.Module = None,
-                    teach_loss: torch.nn.Module = None, choices=None, mode='super', retrain_config=None):
+                    teach_loss: torch.nn.Module = None, choices=None, mode='super', retrain_config=None, args = None):
     model.train()
     criterion.train()
 
@@ -319,6 +321,11 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         model_module.set_sample_config(config=config)
         print(model_module.get_sampled_params_numel(config))
 
+    temp_optimizer = create_optimizer(args, [p for p in model.parameters() if p.requires_grad])
+    lr_scheduler, _ = create_scheduler(args, temp_optimizer)   
+
+    global_iter = epoch * len(data_loader) 
+
     for samples, targets in metric_logger.log_every(data_loader, print_freq, header):
         samples = samples.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
@@ -327,28 +334,27 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
         # sample random config
         if mode == 'super':
-            # config = sample_configs(choices=choices)
-            config = sample_configs_curriculum(choices=choices, epoch=epoch)
+            config = sample_configs(choices=choices)
+            # config = sample_configs_curriculum(choices=choices, epoch=epoch)
             prev_config = get_previous_config(config=config, choices=choices) # None 처리 잘되는거 확인
             model_module = unwrap_model(model)
-            # model_module.set_sample_config(config=config, config_prev=prev_config)
-            model_module.set_sample_config(config=config)
-            # locked_masks = get_locked_masks(model, config, prev_config, choices=choices)
+            model_module.set_sample_config(config=config, config_prev=prev_config)
+            # model_module.set_sample_config(config=config)
 
-            # for name, param in model_module.named_parameters():
-            #     if param.requires_grad:
-            #         print(name, param.shape)
+            # 매 iteration마다 학습 가능한 파라미터만 포함하도록 새 optimizer를 생성
+            optimizer = create_optimizer(
+                args, 
+                [p for p in model.parameters() if p.requires_grad]
+            )
+            lr_scheduler.optimizer = optimizer
+            
+            # 이후 for 루프 내에서 사용
+            # current_lr = lr_scheduler.get_last_lr()[0]
+            current_lr = 0.0001 - (0.0001-0.00001)*(epoch/500)
 
-
-            # print("config : ", config)
-            # for layer in model.modules():
-            #     layer_name = layer._get_name()
-            #     if hasattr(layer, 'samples') and 'weight' in layer.samples:
-            #         param_shape = layer.samples['weight'].shape
-            #         print(f"Layer: {layer_name}, Weight Shape: {param_shape}")
-            #     else:
-            #         print(f"Layer: {layer_name}, No weight parameter")
-            # print("============================================")
+            # 새 optimizer의 모든 파라미터 그룹에 현재 lr을 설정합니다.
+            for group in optimizer.param_groups:
+                group['lr'] = current_lr
 
         elif mode == 'retrain':
             config = retrain_config

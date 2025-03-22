@@ -294,7 +294,6 @@ def main(args):
 
     model_without_ddp = model
     if args.distributed:
-
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module
 
@@ -363,7 +362,7 @@ def main(args):
             args.clip_grad, model_ema, mixup_fn,
             amp=args.amp, teacher_model=teacher_model,
             teach_loss=teacher_loss,
-            choices=choices, mode = args.mode, retrain_config=retrain_config,
+            choices=choices, mode = args.mode, retrain_config=retrain_config, args=args
         )
 
         lr_scheduler.step(epoch)
