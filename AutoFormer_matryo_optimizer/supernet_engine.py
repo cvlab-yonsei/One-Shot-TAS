@@ -334,8 +334,8 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
         # sample random config
         if mode == 'super':
-            config = sample_configs(choices=choices)
-            # config = sample_configs_curriculum(choices=choices, epoch=epoch)
+            # config = sample_configs(choices=choices)
+            config = sample_configs_curriculum(choices=choices, epoch=epoch)
             prev_config = get_previous_config(config=config, choices=choices) # None 처리 잘되는거 확인
             model_module = unwrap_model(model)
             model_module.set_sample_config(config=config, config_prev=prev_config)

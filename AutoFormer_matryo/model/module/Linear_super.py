@@ -49,44 +49,6 @@ class LinearSuper(nn.Linear):
 
         self._sample_parameters()
 
-    # def set_sample_config_matryo(self, sample_in_dim, sample_out_dim, prev_in_dim=None, prev_out_dim=None):
-    #     """
-    #     sample_in_dim, sample_out_dim: 현재 샘플링된 embed_dim
-    #     prev_in_dim, prev_out_dim: 이전 단계에서 사용된 embed_dim (freeze할 weight 영역)
-    #     """
-
-    #     if prev_in_dim is not None and prev_out_dim is not None:
-    #         # **왼쪽 위 (frozen)**
-    #         self.weight_frozen = nn.Parameter(
-    #             self.weight[:prev_out_dim, :prev_in_dim].detach(), requires_grad=False
-    #         )
-
-    #         # **오른쪽 위 (trainable)**
-    #         self.weight_trainable_top_right = nn.Parameter(
-    #             self.weight[:prev_out_dim, prev_in_dim:], requires_grad=True
-    #         )
-
-    #         # **아래쪽 전체 (trainable)**
-    #         self.weight_trainable_bottom = nn.Parameter(
-    #             self.weight[prev_out_dim:, :], requires_grad=True
-    #         )
-
-    #         # 상단 부분 결합 (왼쪽 위 + 오른쪽 위)
-    #         top_combined = torch.cat([self.weight_frozen.detach(), self.weight_trainable_top_right], dim=1)
-
-    #         # 최종 weight 결합 (상단 + 아래쪽)
-    #         self.samples['weight'] = torch.cat([top_combined, self.weight_trainable_bottom], dim=0)
-
-    #     else:
-    #         # 처음에는 전체 weight 사용
-    #         self.samples['weight'] = self.weight
-
-    #     # Bias도 동일하게 처리
-    #     if self.bias is not None:
-    #         self.samples['bias'] = self.bias[:sample_out_dim]
-    #     else:
-    #         self.samples['bias'] = None
-
     def _sample_parameters(self):
         self.samples['weight'] = sample_weight(self.weight, self.sample_in_dim, self.sample_out_dim, self.sample_in_dim_prev, self.sample_out_dim_prev)
         self.samples['bias'] = self.bias

@@ -1,5 +1,6 @@
 import torch
-from torch import nn
+# from torch import nn
+import torch.nn as nn
 from torch.nn import Parameter
 import torch.nn.functional as F
 from .Linear_super import LinearSuper
@@ -13,17 +14,33 @@ def softmax(x, dim, onnx_trace=False):
 
 class RelativePosition2D_super(nn.Module):
 
-    def __init__(self, num_units, max_relative_position):
+    def __init__(self, num_units, max_relative_position, super_embed_dim=None):
         super().__init__()
-
+        
+        self.super_embed_dim = super_embed_dim
         self.num_units = num_units
         self.max_relative_position = max_relative_position
         # The first element in embeddings_table_v is the vertical embedding for the class
-        self.embeddings_table_v = nn.Parameter(torch.randn(max_relative_position * 2 + 2, num_units))
-        self.embeddings_table_h = nn.Parameter(torch.randn(max_relative_position * 2 + 2, num_units))
+        self.embeddings_table_v = nn.Parameter(torch.randn(max_relative_position * 2 + 2, num_units), requires_grad=False) # false 추가
+        self.embeddings_table_h = nn.Parameter(torch.randn(max_relative_position * 2 + 2, num_units), requires_grad=False) # false 추가
 
         trunc_normal_(self.embeddings_table_v, std=.02)
         trunc_normal_(self.embeddings_table_h, std=.02)
+
+        self.v1 = nn.Parameter(torch.rand(max_relative_position * 2 + 2, super_embed_dim//2), requires_grad=True)
+        self.v2 = nn.Parameter(torch.rand(max_relative_position * 2 + 2, super_embed_dim//4), requires_grad=True)
+        self.v3 = nn.Parameter(torch.rand(max_relative_position * 2 + 2, super_embed_dim//4), requires_grad=True)
+
+        self.h1 = nn.Parameter(torch.rand(max_relative_position * 2 + 2, super_embed_dim//2), requires_grad=True)
+        self.h2 = nn.Parameter(torch.rand(max_relative_position * 2 + 2, super_embed_dim//4), requires_grad=True)
+        self.h3 = nn.Parameter(torch.rand(max_relative_position * 2 + 2, super_embed_dim//4), requires_grad=True)
+
+        trunc_normal_(self.v1, std=.02)
+        trunc_normal_(self.v2, std=.02)
+        trunc_normal_(self.v3, std=.02)
+        trunc_normal_(self.h1, std=.02)
+        trunc_normal_(self.h2, std=.02)
+        trunc_normal_(self.h3, std=.02)
 
         self.sample_head_dim = None
         self.sample_embeddings_table_h = None
@@ -31,18 +48,45 @@ class RelativePosition2D_super(nn.Module):
 
     def set_sample_config(self, sample_head_dim, sample_head_dim_prev=None):
         self.sample_head_dim = sample_head_dim
+
+        full_v = torch.cat([self.v1, self.v2], dim=1)
+        full_v_out = torch.cat([full_v, self.v3], dim=1)
+        
+        full_h = torch.cat([self.h1, self.h2], dim=1)
+        full_h_out = torch.cat([full_h, self.h3], dim=1)
+
         if sample_head_dim_prev is None:
+            new_v1 = torch.empty(0, device=self.weight.device)
+            new_v2 = full_v_out[..., :sample_head_dim]
+            new_v3 = full_v_out[..., sample_head_dim:self.super_embed_dim]
+            self.v1 = nn.Parameter(new_v1, requires_grad=False)
+            self.v2 = nn.Parameter(new_v2, requires_grad=True)
+            self.v3 = nn.Parameter(new_v3, requires_grad=False)
+
+            new_h1 = torch.empty(0, device=self.bias.device)
+            new_h2 = full_h_out[..., :sample_head_dim]
+            new_h3 = full_h_out[..., sample_head_dim:self.super_embed_dim]
+            self.h1 = nn.Parameter(new_h1, requires_grad=False)
+            self.h2 = nn.Parameter(new_h2, requires_grad=True)
+            self.h3 = nn.Parameter(new_h3, requires_grad=False)
+
             self.sample_embeddings_table_h = self.embeddings_table_h[:, :sample_head_dim]
             self.sample_embeddings_table_v = self.embeddings_table_v[:, :sample_head_dim]
         else:
-            # frozen: 첫 sample_head_dim_prev columns, trainable: 나머지 columns up to sample_head_dim
-            # frozen_h = nn.Parameter(self.embeddings_table_h[:, :sample_head_dim_prev].clone(), requires_grad=False)
-            # trainable_h = nn.Parameter(self.embeddings_table_h[:, sample_head_dim_prev:sample_head_dim].clone(), requires_grad=True)
-            # self.sample_embeddings_table_h = torch.cat([frozen_h, trainable_h], dim=1)
-            
-            # frozen_v = nn.Parameter(self.embeddings_table_v[:, :sample_head_dim_prev].clone(), requires_grad=False)
-            # trainable_v = nn.Parameter(self.embeddings_table_v[:, sample_head_dim_prev:sample_head_dim].clone(), requires_grad=True)
-            # self.sample_embeddings_table_v = torch.cat([frozen_v, trainable_v], dim=1)
+            new_v1 = full_v_out[..., :sample_head_dim_prev].detach()
+            new_v2 = full_v_out[..., sample_head_dim_prev:sample_head_dim]
+            new_v3 = full_v_out[..., sample_head_dim:self.super_embed_dim].detach()
+            self.v1 = nn.Parameter(new_v1, requires_grad=False)
+            self.v2 = nn.Parameter(new_v2, requires_grad=True)
+            self.v3 = nn.Parameter(new_v3, requires_grad=False)
+
+            new_h1 = full_h_out[..., :sample_head_dim_prev].detach()
+            new_h2 = full_h_out[..., sample_head_dim_prev:sample_head_dim]
+            new_h3 = full_h_out[..., sample_head_dim:self.super_embed_dim].detach()
+            self.h1 = nn.Parameter(new_h1, requires_grad=False)
+            self.h2 = nn.Parameter(new_h2, requires_grad=True)
+            self.h3 = nn.Parameter(new_h3, requires_grad=False)
+
             frozen_h = self.embeddings_table_h[:, :sample_head_dim_prev].detach()
             trainable_h = self.embeddings_table_h[:, sample_head_dim_prev:sample_head_dim]
             self.sample_embeddings_table_h = torch.cat([frozen_h, trainable_h], dim=1)
@@ -54,6 +98,22 @@ class RelativePosition2D_super(nn.Module):
 
     def calc_sampled_param_num(self):
         return self.sample_embeddings_table_h.numel() + self.sample_embeddings_table_v.numel()
+
+    @property
+    def embeddings_table_v(self):
+        # frozen bias가 없으면, bias1은 빈 텐서.
+        if self.v1.numel() == 0:
+            return self.v2
+        else:
+            return torch.cat([self.v1, self.v2], dim=1)
+
+    @property
+    def embeddings_table_h(self):
+        # frozen bias가 없으면, bias1은 빈 텐서.
+        if self.h1.numel() == 0:
+            return self.h2
+        else:
+            return torch.cat([self.h1, self.h2], dim=1)
 
     def forward(self, length_q, length_k):
         # remove the first cls token distance computation
@@ -79,7 +139,8 @@ class RelativePosition2D_super(nn.Module):
         final_mat_v = final_mat_v.long()
         final_mat_h = final_mat_h.long()
         # get the embeddings with the corresponding distance
-        embeddings = self.sample_embeddings_table_v[final_mat_v] + self.sample_embeddings_table_h[final_mat_h]
+        embeddings = self.embeddings_table_v[final_mat_v] + self.embeddings_table_h[final_mat_h]
+        # embeddings = self.sample_embeddings_table_v[final_mat_v] + self.sample_embeddings_table_h[final_mat_h]
 
         return embeddings
 
@@ -101,8 +162,8 @@ class AttentionSuper(nn.Module):
 
         self.relative_position = relative_position
         if self.relative_position:
-            self.rel_pos_embed_k = RelativePosition2D_super(super_embed_dim //num_heads, max_relative_position)
-            self.rel_pos_embed_v = RelativePosition2D_super(super_embed_dim //num_heads, max_relative_position)
+            self.rel_pos_embed_k = RelativePosition2D_super(super_embed_dim //num_heads, max_relative_position, super_embed_dim)
+            self.rel_pos_embed_v = RelativePosition2D_super(super_embed_dim //num_heads, max_relative_position, super_embed_dim)
         self.max_relative_position = max_relative_position
         self.sample_qk_embed_dim = None
         self.sample_v_embed_dim = None

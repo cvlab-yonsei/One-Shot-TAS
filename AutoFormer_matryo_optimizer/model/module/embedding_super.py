@@ -5,7 +5,12 @@ from model.utils import to_2tuple
 import numpy as np
 
 class Conv2dSuper(nn.Conv2d):
-    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.weight.requires_grad = False
+        self.bias.requires_grad = False
+
     @property
     def weight(self):
         # 만약 self.w1이 빈 텐서라면, 그냥 self.w2를 반환
@@ -50,18 +55,18 @@ class PatchembedSuper(nn.Module):
         self.sampled_bias_prev = None
         self.sampled_scale_prev = None
 
-        self.proj.w1 = nn.Parameter(torch.rand(embed_dim//4, in_chans, *patch_size), requires_grad=False)
+        self.proj.w1 = nn.Parameter(torch.rand(embed_dim//4, in_chans, *patch_size), requires_grad=True)
         self.proj.w2 = nn.Parameter(torch.rand(embed_dim//4, in_chans, *patch_size), requires_grad=True)
-        self.proj.w3 = nn.Parameter(torch.rand(embed_dim//2, in_chans, *patch_size), requires_grad=False)
+        self.proj.w3 = nn.Parameter(torch.rand(embed_dim//2, in_chans, *patch_size), requires_grad=True)
 
         # print("self.proj.weight.shape : ", self.proj.weight.shape)
         # print("self.proj.w1.shape : ", self.proj.w1.shape)
         # print("self.proj.w2.shape : ", self.proj.w2.shape)
         # print("self.proj.w3.shape : ", self.proj.w3.shape)
 
-        self.proj.bias1 = nn.Parameter(torch.rand(embed_dim//4), requires_grad=False)
+        self.proj.bias1 = nn.Parameter(torch.rand(embed_dim//4), requires_grad=True)
         self.proj.bias2 = nn.Parameter(torch.rand(embed_dim//4), requires_grad=True)
-        self.proj.bias3 = nn.Parameter(torch.rand(embed_dim//2), requires_grad=False)
+        self.proj.bias3 = nn.Parameter(torch.rand(embed_dim//2), requires_grad=True)
 
     def set_sample_config(self, sample_embed_dim, sample_embed_dim_prev=None):
         self.sample_embed_dim = sample_embed_dim

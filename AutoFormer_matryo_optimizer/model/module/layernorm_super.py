@@ -14,14 +14,15 @@ class LayerNormSuper(torch.nn.LayerNorm):
         self.sample_embed_dim_prev = None
 
         self.weight.requires_grad = False
+        self.bias.requires_grad = False
 
-        self.w1 = nn.Parameter(torch.rand(0), requires_grad=False)
+        self.w1 = nn.Parameter(torch.rand(0), requires_grad=True)
         self.w2 = nn.Parameter(torch.rand(super_embed_dim), requires_grad=True)
-        self.w3 = nn.Parameter(torch.rand(0), requires_grad=False)
+        self.w3 = nn.Parameter(torch.rand(0), requires_grad=True)
 
-        self.bias1 = nn.Parameter(torch.rand(0), requires_grad=False)
+        self.bias1 = nn.Parameter(torch.rand(0), requires_grad=True)
         self.bias2 = nn.Parameter(torch.rand(super_embed_dim), requires_grad=True)
-        self.bias3 = nn.Parameter(torch.rand(0), requires_grad=False)
+        self.bias3 = nn.Parameter(torch.rand(0), requires_grad=True)
 
         self.samples = {}
         self.profiling = False

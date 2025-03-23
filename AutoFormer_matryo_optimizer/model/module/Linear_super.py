@@ -23,21 +23,22 @@ class LinearSuper(nn.Linear):
         self.weight_trainable_bottom = None  # 학습 가능한 weight (아래쪽 전체)
 
         self.weight.requires_grad = False
+        self.bias.requires_grad = False
 
-        self.w1 = nn.Parameter(torch.randn(super_out_dim//2, super_in_dim//2), requires_grad=False)
+        self.w1 = nn.Parameter(torch.randn(super_out_dim//2, super_in_dim//2), requires_grad=True)
         self.w2 = nn.Parameter(torch.randn(super_out_dim//2, super_in_dim//4), requires_grad=True)
         # self.w3 = nn.Parameter(torch.randn(0, super_in_dim), requires_grad=True)
         self.w3 = nn.Parameter(torch.randn(super_out_dim//4, (super_in_dim//4)*3), requires_grad=True) # 여긴 일단 parameter 셀때 안보게 False로 둘까
         
         # 무조건 freeze인 나머지 바깥 테두리
-        self.w4 = nn.Parameter(torch.randn((super_out_dim//4)*3, super_in_dim//4), requires_grad=False)
-        self.w5 = nn.Parameter(torch.randn(super_out_dim//4, super_in_dim), requires_grad=False)
+        self.w4 = nn.Parameter(torch.randn((super_out_dim//4)*3, super_in_dim//4), requires_grad=True)
+        self.w5 = nn.Parameter(torch.randn(super_out_dim//4, super_in_dim), requires_grad=True)
 
-        self.bias1 = nn.Parameter(torch.rand(0), requires_grad=False)
+        self.bias1 = nn.Parameter(torch.rand(0), requires_grad=True)
         self.bias2 = nn.Parameter(torch.rand(super_out_dim), requires_grad=True)
 
         # 무조건 freeze인 나머지 바깥 테두리
-        self.bias3 = nn.Parameter(torch.rand(0), requires_grad=False)
+        self.bias3 = nn.Parameter(torch.rand(0), requires_grad=True)
 
         self.scale = scale
         self._reset_parameters(bias, uniform_, non_linear)
