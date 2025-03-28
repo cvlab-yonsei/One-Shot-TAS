@@ -275,40 +275,20 @@ def sample_configs_curriculum(choices, epoch):
     dimensions = ['mlp_ratio', 'num_heads']
     depth = random.choice(choices['depth'])
 
-    # if epoch <= 300:
-    #     config['embed_dim'] = [192] * depth
-    #     config['mlp_ratio'] = [3.5] * depth
-    #     config['num_heads'] = [3] * depth
-
-    # elif 301 <= epoch <= 400:
-    #     config['embed_dim'] = [random.choices([192, 216, 240], weights=[1, 4, 1])[0]] * depth
-    #     config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 3])[0] for _ in range(depth)]
-    #     config['num_heads'] = [random.choices([3, 4], weights=[1, 3])[0] for _ in range(depth)]
-
-    # elif 401 <= epoch <= 500:
-    #     config['embed_dim'] = [random.choices([192, 216, 240], weights=[1, 1, 4])[0]] * depth
-    #     config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 5])[0] for _ in range(depth)]
-    #     config['num_heads'] = [random.choices([3, 4], weights=[1, 5])[0] for _ in range(depth)]
-
-    if epoch < 250:
+    if epoch <= 300:
         config['embed_dim'] = [192] * depth
         config['mlp_ratio'] = [3.5] * depth
         config['num_heads'] = [3] * depth
 
-    elif 250 <= epoch < 400:
-        config['embed_dim'] = [192] * depth
-        config['mlp_ratio'] = [3.5] * depth
-        config['num_heads'] = [3] * depth
-
-    elif 400 <= epoch < 450:
-        config['embed_dim'] = [random.choices([192, 216, 240], weights=[3, 2, 1])[0]] * depth
-        config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[3, 1])[0] for _ in range(depth)]
-        config['num_heads'] = [random.choices([3, 4], weights=[3, 1])[0] for _ in range(depth)]
-
-    elif 450 <= epoch <= 500:
-        config['embed_dim'] = [random.choices([192, 216, 240], weights=[1, 2, 3])[0]] * depth
+    elif 301 <= epoch <= 400:
+        config['embed_dim'] = [random.choices([192, 216, 240], weights=[1, 4, 1])[0]] * depth
         config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 3])[0] for _ in range(depth)]
         config['num_heads'] = [random.choices([3, 4], weights=[1, 3])[0] for _ in range(depth)]
+
+    elif 401 <= epoch <= 500:
+        config['embed_dim'] = [random.choices([192, 216, 240], weights=[1, 1, 4])[0]] * depth
+        config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 5])[0] for _ in range(depth)]
+        config['num_heads'] = [random.choices([3, 4], weights=[1, 5])[0] for _ in range(depth)]
 
     config['layer_num'] = depth
     return config
@@ -350,7 +330,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             config = sample_configs_curriculum(choices=choices, epoch=epoch)
             prev_config = get_previous_config(config=config, choices=choices) # None 처리 잘되는거 확인
             model_module = unwrap_model(model)
-            model_module.set_sample_config(config=config, config_prev=prev_config)
+            model_module.set_sample_config(config=config, config_prev=None)
             # model_module.set_sample_config(config=config)
             # locked_masks = get_locked_masks(model, config, prev_config, choices=choices)
 
