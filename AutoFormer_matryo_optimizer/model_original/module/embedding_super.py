@@ -24,18 +24,12 @@ class PatchembedSuper(nn.Module):
         self.sampled_bias = None
         self.sampled_scale = None
 
-        self.sample_embed_dim_prev = None
-        self.sampled_weight_prev = None
-        self.sampled_bias_prev = None
-        self.sampled_scale_prev = None
-
-    def set_sample_config(self, sample_embed_dim, sample_embed_dim_prev=None):
+    def set_sample_config(self, sample_embed_dim):
         self.sample_embed_dim = sample_embed_dim
         self.sampled_weight = self.proj.weight[:sample_embed_dim, ...]
         self.sampled_bias = self.proj.bias[:self.sample_embed_dim, ...]
         if self.scale:
             self.sampled_scale = self.super_embed_dim / sample_embed_dim
-
     def forward(self, x):
         B, C, H, W = x.shape
         assert H == self.img_size[0] and W == self.img_size[1], \

@@ -11,7 +11,6 @@ class LayerNormSuper(torch.nn.LayerNorm):
 
         # the current sampled embed dim
         self.sample_embed_dim = None
-        self.sample_embed_dim_prev = None
 
         self.samples = {}
         self.profiling = False
@@ -29,7 +28,7 @@ class LayerNormSuper(torch.nn.LayerNorm):
         self.samples['bias'] = self.bias[:self.sample_embed_dim]
         return self.samples
 
-    def set_sample_config(self, sample_embed_dim, sample_embed_dim_prev=None):
+    def set_sample_config(self, sample_embed_dim):
         self.sample_embed_dim = sample_embed_dim
         self._sample_parameters()
 

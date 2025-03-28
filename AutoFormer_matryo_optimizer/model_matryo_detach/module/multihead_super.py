@@ -3,7 +3,6 @@ from torch import nn
 from torch.nn import Parameter
 import torch.nn.functional as F
 from .Linear_super import LinearSuper
-from .Linear_super_original import LinearSuperOriginal
 from .qkv_super import qkv_super
 from ..utils import trunc_normal_
 def softmax(x, dim, onnx_trace=False):
@@ -32,8 +31,26 @@ class RelativePosition2D_super(nn.Module):
 
     def set_sample_config(self, sample_head_dim, sample_head_dim_prev=None):
         self.sample_head_dim = sample_head_dim
-        self.sample_embeddings_table_h = self.embeddings_table_h[:,:sample_head_dim]
-        self.sample_embeddings_table_v = self.embeddings_table_v[:,:sample_head_dim]
+        if sample_head_dim_prev is None:
+            self.sample_embeddings_table_h = self.embeddings_table_h[:, :sample_head_dim]
+            self.sample_embeddings_table_v = self.embeddings_table_v[:, :sample_head_dim]
+        else:
+            # frozen: 첫 sample_head_dim_prev columns, trainable: 나머지 columns up to sample_head_dim
+            # frozen_h = nn.Parameter(self.embeddings_table_h[:, :sample_head_dim_prev].clone(), requires_grad=False)
+            # trainable_h = nn.Parameter(self.embeddings_table_h[:, sample_head_dim_prev:sample_head_dim].clone(), requires_grad=True)
+            # self.sample_embeddings_table_h = torch.cat([frozen_h, trainable_h], dim=1)
+            
+            # frozen_v = nn.Parameter(self.embeddings_table_v[:, :sample_head_dim_prev].clone(), requires_grad=False)
+            # trainable_v = nn.Parameter(self.embeddings_table_v[:, sample_head_dim_prev:sample_head_dim].clone(), requires_grad=True)
+            # self.sample_embeddings_table_v = torch.cat([frozen_v, trainable_v], dim=1)
+            frozen_h = self.embeddings_table_h[:, :sample_head_dim_prev].detach()
+            trainable_h = self.embeddings_table_h[:, sample_head_dim_prev:sample_head_dim]
+            self.sample_embeddings_table_h = torch.cat([frozen_h, trainable_h], dim=1)
+
+            frozen_v = self.embeddings_table_v[:, :sample_head_dim_prev].detach()
+            trainable_v = self.embeddings_table_v[:, sample_head_dim_prev:sample_head_dim]
+            self.sample_embeddings_table_v = torch.cat([frozen_v, trainable_v], dim=1)
+
 
     def calc_sampled_param_num(self):
         return self.sample_embeddings_table_h.numel() + self.sample_embeddings_table_v.numel()
@@ -80,7 +97,7 @@ class AttentionSuper(nn.Module):
         if change_qkv:
             self.qkv = qkv_super(super_embed_dim, 3 * super_embed_dim, bias=qkv_bias)
         else:
-            self.qkv = LinearSuperOriginal(super_embed_dim, 3 * super_embed_dim, bias=qkv_bias)
+            self.qkv = LinearSuper(super_embed_dim, 3 * super_embed_dim, bias=qkv_bias)
 
         self.relative_position = relative_position
         if self.relative_position:
@@ -99,7 +116,7 @@ class AttentionSuper(nn.Module):
         self.sample_scale_prev = None
         self.sample_in_embed_dim_prev = None
 
-        self.proj = LinearSuperOriginal(super_embed_dim, super_embed_dim)
+        self.proj = LinearSuper(super_embed_dim, super_embed_dim)
 
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj_drop = nn.Dropout(proj_drop)
@@ -144,10 +161,8 @@ class AttentionSuper(nn.Module):
                 self.sample_scale_prev = None
 
 
-        # self.qkv.set_sample_config(sample_in_dim=sample_in_embed_dim, sample_out_dim=3*self.sample_qk_embed_dim, sample_in_dim_prev=sample_in_embed_dim_prev, sample_out_dim_prev=(3*self.sample_qk_embed_dim_prev) if self.sample_qk_embed_dim_prev is not None else None)
-        # self.proj.set_sample_config(sample_in_dim=self.sample_qk_embed_dim, sample_out_dim=sample_in_embed_dim, sample_in_dim_prev=self.sample_qk_embed_dim_prev, sample_out_dim_prev=self.sample_in_embed_dim_prev)
-        self.qkv.set_sample_config(sample_in_dim=sample_in_embed_dim, sample_out_dim=3*self.sample_qk_embed_dim) 
-        self.proj.set_sample_config(sample_in_dim=self.sample_qk_embed_dim, sample_out_dim=sample_in_embed_dim)
+        self.qkv.set_sample_config(sample_in_dim=sample_in_embed_dim, sample_out_dim=3*self.sample_qk_embed_dim, sample_in_dim_prev=sample_in_embed_dim_prev, sample_out_dim_prev=(3*self.sample_qk_embed_dim_prev) if self.sample_qk_embed_dim_prev is not None else None)
+        self.proj.set_sample_config(sample_in_dim=self.sample_qk_embed_dim, sample_out_dim=sample_in_embed_dim, sample_in_dim_prev=self.sample_qk_embed_dim_prev, sample_out_dim_prev=self.sample_in_embed_dim_prev)
         
         if sample_num_heads_prev is None:
             sample_num_heads_prev = sample_num_heads

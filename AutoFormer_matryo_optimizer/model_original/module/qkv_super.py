@@ -16,10 +16,6 @@ class qkv_super(nn.Linear):
         self.sample_in_dim = None
         self.sample_out_dim = None
 
-        # 추가: 이전 sampled size 정보 (freeze를 위한)
-        self.sample_in_dim_prev = None
-        self.sample_out_dim_prev = None
-
         self.samples = {}
 
         self.scale = scale
@@ -40,21 +36,18 @@ class qkv_super(nn.Linear):
         if bias:
             nn.init.constant_(self.bias, 0.)
 
-    def set_sample_config(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, sample_out_dim_prev=None):
+    def set_sample_config(self, sample_in_dim, sample_out_dim):
         self.sample_in_dim = sample_in_dim
         self.sample_out_dim = sample_out_dim
-        self.sample_in_dim_prev = sample_in_dim_prev
-        self.sample_out_dim_prev = sample_out_dim_prev
 
         self._sample_parameters()
 
     def _sample_parameters(self):
-        self.samples['weight'] = sample_weight(self.weight, self.sample_in_dim, self.sample_out_dim,
-                                               self.sample_in_dim_prev, self.sample_out_dim_prev)
+        self.samples['weight'] = sample_weight(self.weight, self.sample_in_dim, self.sample_out_dim)
         self.samples['bias'] = self.bias
         self.sample_scale = self.super_out_dim/self.sample_out_dim
         if self.bias is not None:
-            self.samples['bias'] = sample_bias(self.bias, self.sample_out_dim, self.sample_out_dim_prev)
+            self.samples['bias'] = sample_bias(self.bias, self.sample_out_dim)
         return self.samples
 
     def forward(self, x):
@@ -76,15 +69,15 @@ class qkv_super(nn.Linear):
         total_flops += sequence_length *  np.prod(self.samples['weight'].size())
         return total_flops
 
-def sample_weight(weight, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, sample_out_dim_prev=None):
+def sample_weight(weight, sample_in_dim, sample_out_dim):
+
     sample_weight = weight[:, :sample_in_dim]
     sample_weight = torch.cat([sample_weight[i:sample_out_dim:3, :] for i in range(3)], dim =0)
 
     return sample_weight
 
 
-def sample_bias(bias, sample_out_dim, sample_out_dim_prev=None):
+def sample_bias(bias, sample_out_dim):
     sample_bias = bias[:sample_out_dim]
 
     return sample_bias
-

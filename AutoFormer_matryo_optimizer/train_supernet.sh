@@ -11,4 +11,10 @@
 python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train.py --data-path '/data' --gp \
 --change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 500 --warmup-epochs 20 \
 --output /OUTPUT_PATH --batch-size 128 \
---save_checkpoint_path 'checkpoint-matryo-optimizer-' --save_log_path './log/supernet_matryo-optimizer.log'
+--save_checkpoint_path 'checkpoint-matryo-optimizer-config-change' --save_log_path './log/supernet_matryo-optimizer-only-linear-super-p-to-f-module-config-chagne.log'
+
+
+# python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train.py --data-path '/data' --gp \
+# --change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 500 --warmup-epochs 20 \
+# --resume '/OUTPUT_PATH/checkpoint-original-14.pth' --output /OUTPUT_PATH --batch-size 128 \
+# --save_checkpoint_path 'checkpoint-matryo-optimizer-300-' --save_log_path './log/supernet_matryo-optimizer-300.log'

@@ -14,7 +14,7 @@ from timm.scheduler import create_scheduler
 from timm.optim import create_optimizer
 from timm.utils import NativeScaler
 from lib.datasets import build_dataset
-from supernet_engine import train_one_epoch, evaluate
+from supernet_engine_gradient import train_one_epoch
 from lib.samplers import RASampler
 from lib import utils
 from lib.config import cfg, update_config_from_file
@@ -262,11 +262,6 @@ def main(args):
 
     print(f"Creating SuperVisionTransformer")
     print(cfg)
-
-    
-    choices = {'num_heads': cfg.SEARCH_SPACE.NUM_HEADS, 'mlp_ratio': cfg.SEARCH_SPACE.MLP_RATIO,
-               'embed_dim': cfg.SEARCH_SPACE.EMBED_DIM , 'depth': cfg.SEARCH_SPACE.DEPTH}
-
     model = Vision_TransformerSuper(img_size=args.input_size,
                                     patch_size=args.patch_size,
                                     embed_dim=cfg.SUPERNET.EMBED_DIM, depth=cfg.SUPERNET.DEPTH,
@@ -277,7 +272,10 @@ def main(args):
                                     num_classes=args.nb_classes,
                                     max_relative_position=args.max_relative_position,
                                     relative_position=args.relative_position,
-                                    change_qkv=args.change_qkv, abs_pos=not args.no_abs_pos, choices=choices)
+                                    change_qkv=args.change_qkv, abs_pos=not args.no_abs_pos)
+
+    choices = {'num_heads': cfg.SEARCH_SPACE.NUM_HEADS, 'mlp_ratio': cfg.SEARCH_SPACE.MLP_RATIO,
+               'embed_dim': cfg.SEARCH_SPACE.EMBED_DIM , 'depth': cfg.SEARCH_SPACE.DEPTH}
 
     model.to(device)
     if args.teacher_model:
@@ -296,6 +294,7 @@ def main(args):
 
     model_without_ddp = model
     if args.distributed:
+
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module
 
@@ -305,7 +304,6 @@ def main(args):
     linear_scaled_lr = args.lr * args.batch_size * utils.get_world_size() / 512.0
     args.lr = linear_scaled_lr
     optimizer = create_optimizer(args, model_without_ddp)
-    # optimizer = create_optimizer(args, [p for p in model_without_ddp.parameters() if p.requires_grad])
     loss_scaler = NativeScaler()
     lr_scheduler, _ = create_scheduler(args, optimizer)
 
@@ -354,11 +352,12 @@ def main(args):
     print("Start training")
     start_time = time.time()
     max_accuracy = 0.0
-    prev_step_config = None
 
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
+
+        print("epoch : ", epoch)
 
         train_stats = train_one_epoch(
             model, criterion, data_loader_train,
@@ -366,41 +365,43 @@ def main(args):
             args.clip_grad, model_ema, mixup_fn,
             amp=args.amp, teacher_model=teacher_model,
             teach_loss=teacher_loss,
-            choices=choices, mode = args.mode, retrain_config=retrain_config, args=args, prev_step_config=prev_step_config
+            choices=choices, mode = args.mode, retrain_config=retrain_config,
         )
 
-        lr_scheduler.step(epoch)
-        if args.output_dir:
-            # checkpoint_paths = [output_dir / 'checkpoint.pth']
-            checkpoint_paths = [output_dir / (args.save_checkpoint_path + str((epoch+1)//20) + '.pth')]
-            for checkpoint_path in checkpoint_paths:
-                utils.save_on_master({
-                    'model': model_without_ddp.state_dict(),
-                    'optimizer': optimizer.state_dict(),
-                    'lr_scheduler': lr_scheduler.state_dict(),
-                    'epoch': epoch,
-                    # 'model_ema': get_state_dict(model_ema),
-                    'scaler': loss_scaler.state_dict(),
-                    'args': args,
-                }, checkpoint_path)
+        # lr_scheduler.step(epoch)
+        # if args.output_dir:
+        #     # checkpoint_paths = [output_dir / 'checkpoint.pth']
+        #     checkpoint_paths = [output_dir / (args.save_checkpoint_path + str((epoch+1)//20) + '.pth')]
+        #     for checkpoint_path in checkpoint_paths:
+        #         utils.save_on_master({
+        #             'model': model_without_ddp.state_dict(),
+        #             'optimizer': optimizer.state_dict(),
+        #             'lr_scheduler': lr_scheduler.state_dict(),
+        #             'epoch': epoch,
+        #             # 'model_ema': get_state_dict(model_ema),
+        #             'scaler': loss_scaler.state_dict(),
+        #             'args': args,
+        #         }, checkpoint_path)
 
-        test_stats = evaluate(data_loader_val, model, device, amp=args.amp, choices=choices, mode = args.mode, retrain_config=retrain_config)
-        print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
-        max_accuracy = max(max_accuracy, test_stats["acc1"])
-        print(f'Max accuracy: {max_accuracy:.2f}%')
+        # test_stats = evaluate(data_loader_val, model, device, amp=args.amp, choices=choices, mode = args.mode, retrain_config=retrain_config)
+        
+        # print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
+        # max_accuracy = max(max_accuracy, test_stats["acc1"])
+        # print(f'Max accuracy: {max_accuracy:.2f}%')
 
-        log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                     **{f'test_{k}': v for k, v in test_stats.items()},
-                     'epoch': epoch,
-                     'n_parameters': n_parameters}
+    #     log_stats = {
+    #         # **{f'train_{k}': v for k, v in train_stats.items()},
+    #                  **{f'test_{k}': v for k, v in test_stats.items()},
+    #                  'epoch': epoch,
+    #                  'n_parameters': n_parameters}
 
-        if args.output_dir and utils.is_main_process():
-            with (output_dir / "log.txt").open("a") as f:
-                f.write(json.dumps(log_stats) + "\n")
+    #     if args.output_dir and utils.is_main_process():
+    #         with (output_dir / "log.txt").open("a") as f:
+    #             f.write(json.dumps(log_stats) + "\n")
 
-    total_time = time.time() - start_time
-    total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-    print('Training time {}'.format(total_time_str))
+    # total_time = time.time() - start_time
+    # total_time_str = str(datetime.timedelta(seconds=int(total_time)))
+    # print('Training time {}'.format(total_time_str))
 
 
 if __name__ == '__main__':
