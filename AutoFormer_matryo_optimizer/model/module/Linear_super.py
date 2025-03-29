@@ -126,6 +126,36 @@ class LinearSuper(nn.Linear):
 
                 # print(f"Split head into 1x{len(dim1_splits)} weight segments and 1 bias.")
 
+            elif name == 'qkv' or name == 'proj':
+                embed_dims = sorted(set(choices['embed_dim']))
+
+                if name == 'qkv':
+                    dim0_splits = [d * 3 for d in embed_dims] + [self.super_out_dim]
+                    dim1_splits = embed_dims + [self.super_in_dim]
+                else:  # 'proj'
+                    dim0_splits = embed_dims + [self.super_out_dim]
+                    dim1_splits = embed_dims + [self.super_in_dim]
+
+                self.split_weights = nn.ParameterDict()
+                for i in range(len(dim0_splits)):
+                    for j in range(len(dim1_splits)):
+                        start_dim0 = 0 if i == 0 else dim0_splits[i - 1]
+                        end_dim0 = dim0_splits[i]
+                        start_dim1 = 0 if j == 0 else dim1_splits[j - 1]
+                        end_dim1 = dim1_splits[j]
+                        shape = (end_dim0 - start_dim0, end_dim1 - start_dim1)
+                        param_name = f'w{i+1}_{j+1}'
+                        self.split_weights[param_name] = nn.Parameter(torch.empty(shape))
+                        self._init_split_param(self.split_weights[param_name])
+
+                self.split_bias = nn.ParameterDict()
+                for i in range(len(dim0_splits)):
+                    start = dim0_splits[i - 1] if i > 0 else 0
+                    end = dim0_splits[i]
+                    key = f'bias_{i+1}'
+                    self.split_bias[key] = nn.Parameter(torch.empty(end - start))
+                    self._init_split_param(self.split_bias[key], is_bias=True)
+
         # self.w1 = nn.Parameter(self.weight.data.clone(), requires_grad=True)
         
         # self.bias1 = nn.Parameter(self.bias.data.clone(), requires_grad=True)
@@ -235,6 +265,32 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
             key = f'w1_{j+1}'
             self.split_weights[key].requires_grad = (j == j_active)
 
+    elif name == 'qkv':
+        embed_dims = sorted(set(choices['embed_dim']))
+        dim0_splits = [3 * e for e in embed_dims] + [self.super_out_dim]
+        dim1_splits = embed_dims + [self.super_in_dim]
+
+        i_active = next(i for i, val in enumerate(dim0_splits) if val >= sample_out_dim)
+        j_active = next(j for j, val in enumerate(dim1_splits) if val >= sample_in_dim)
+
+        for i in range(len(dim0_splits)):
+            for j in range(len(dim1_splits)):
+                key = f'w{i+1}_{j+1}'
+                self.split_weights[key].requires_grad = (i == i_active and j == j_active)
+
+    elif name == 'proj':
+        embed_dims = sorted(set(choices['embed_dim']))
+        dim0_splits = embed_dims + [self.super_out_dim]
+        dim1_splits = embed_dims + [self.super_in_dim]
+
+        i_active = next(i for i, val in enumerate(dim0_splits) if val >= sample_out_dim)
+        j_active = next(j for j, val in enumerate(dim1_splits) if val >= sample_in_dim)
+
+        for i in range(len(dim0_splits)):
+            for j in range(len(dim1_splits)):
+                key = f'w{i+1}_{j+1}'
+                self.split_weights[key].requires_grad = (i == i_active and j == j_active)
+
     # weight 조립
     row_blocks = []
     for i in range(len(dim0_splits)):
@@ -294,3 +350,33 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None):
         #     print(f"  {key:10s} -> {self.split_bias[key].requires_grad}")
 
         return sample_bias
+    
+    elif name == 'qkv':
+        embed_dims = sorted(set(choices['embed_dim']))
+        dim0_sizes = [3 * e for e in embed_dims] + [self.super_out_dim]
+
+        i_active = next(i for i, val in enumerate(dim0_sizes) if val >= sample_out_dim)
+
+        collected_bias = []
+        for i in range(len(dim0_sizes)):
+            key = f'bias_{i+1}'
+            self.split_bias[key].requires_grad = (i == i_active)
+            collected_bias.append(self.split_bias[key])
+
+        full_bias = torch.cat(collected_bias, dim=0)
+        return full_bias[:sample_out_dim]
+
+    elif name == 'proj':
+        embed_dims = sorted(set(choices['embed_dim']))
+        dim0_sizes = embed_dims + [self.super_out_dim]
+
+        i_active = next(i for i, val in enumerate(dim0_sizes) if val >= sample_out_dim)
+
+        collected_bias = []
+        for i in range(len(dim0_sizes)):
+            key = f'bias_{i+1}'
+            self.split_bias[key].requires_grad = (i == i_active)
+            collected_bias.append(self.split_bias[key])
+
+        full_bias = torch.cat(collected_bias, dim=0)
+        return full_bias[:sample_out_dim]

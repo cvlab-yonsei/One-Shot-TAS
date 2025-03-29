@@ -40,6 +40,33 @@ import time
     
 #     return prev_config
 
+def manual_lr_schedule(epoch, args):
+    # 워밍업 설정
+    warmup_epochs = args.warmup_epochs       # ex. 20
+    warmup_start_lr = args.warmup_lr         # ex. 1e-6
+    base_lr = args.lr                        # ex. 5e-4
+    min_lr = args.min_lr                     # ex. 1e-5
+    total_epochs = args.epochs               # ex. 500
+
+    # if epoch < warmup_epochs:
+    #     # 선형 워밍업
+    #     current_lr = warmup_start_lr + (base_lr - warmup_start_lr) * (epoch / warmup_epochs)
+    # else:
+    #     # 선형 디케이
+    #     decay_progress = (epoch - warmup_epochs) / (total_epochs - warmup_epochs)
+    #     current_lr = base_lr - (base_lr - min_lr) * decay_progress
+
+    # cosine decay + warmup
+    if epoch < warmup_epochs:
+        current_lr = warmup_start_lr + (base_lr - warmup_start_lr) * (epoch / warmup_epochs)
+    else:
+        decay_progress = (epoch - warmup_epochs) / (total_epochs - warmup_epochs)
+        cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_progress))
+        current_lr = min_lr + (base_lr - min_lr) * cosine_decay
+    
+    return current_lr
+
+
 def get_previous_config(config, choices):
     """
     한 단계 작은 subnet을 찾는 함수.
@@ -346,6 +373,8 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             # model_module.set_sample_config(config=config)
 
             if config != prev_step_config:
+                print("config : ", config)
+                print("prev_step_config : ", prev_step_config)
                 prev_step_config = config
                 print("config change!")
                 # 매 iteration마다 학습 가능한 파라미터만 포함하도록 새 optimizer를 생성
@@ -355,21 +384,20 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                 )
                 lr_scheduler.optimizer = optimizer
                 
-            # 이후 for 루프 내에서 사용
-            # current_lr = lr_scheduler.get_last_lr()[0]
+            # if epoch < 20:
+            #     # 워밍업: 0~20 epoch에서 1e-6에서 1e-3로 증가
+            #     current_lr = 1e-6 + (1e-3 - 1e-6) * (epoch / 20)
+            # else:
+            #     # 디케이: 20~500 epoch에서 1e-3에서 1e-5로 감소
+            #     current_lr = 1e-3 - (1e-3 - 1e-5) * ((epoch - 20) / (500 - 20))
 
-            # current_lr = 0.001 - (0.001-0.00001)*(epoch/500)/
-            # current_lr = 0.01 - (0.01-0.0001)*(epoch/500)
-            if epoch < 20:
-                # 워밍업: 0~20 epoch에서 1e-6에서 1e-3로 증가
-                current_lr = 1e-6 + (1e-3 - 1e-6) * (epoch / 20)
-            else:
-                # 디케이: 20~500 epoch에서 1e-3에서 1e-5로 감소
-                current_lr = 1e-3 - (1e-3 - 1e-5) * ((epoch - 20) / (500 - 20))
+            # # 새 optimizer의 모든 파라미터 그룹에 현재 lr을 설정합니다.
+            # for group in optimizer.param_groups:
+            #     group['lr'] = current_lr
 
-            # 새 optimizer의 모든 파라미터 그룹에 현재 lr을 설정합니다.
-            for group in optimizer.param_groups:
-                group['lr'] = current_lr
+            current_lr = manual_lr_schedule(epoch, args)
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = current_lr
 
         elif mode == 'retrain':
             config = retrain_config
@@ -425,7 +453,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
-    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}, prev_step_config
 
 @torch.no_grad()
 def evaluate(data_loader, model, device, amp=True, choices=None, mode='super', retrain_config=None):

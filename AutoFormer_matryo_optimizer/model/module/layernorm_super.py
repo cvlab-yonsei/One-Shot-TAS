@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class LayerNormSuper(torch.nn.LayerNorm):
-    def __init__(self, super_embed_dim):
+    def __init__(self, super_embed_dim, choices=None):
         super().__init__(super_embed_dim)
 
         # the largest embed dim

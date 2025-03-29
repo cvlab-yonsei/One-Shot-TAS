@@ -36,7 +36,7 @@ class Vision_TransformerSuper(nn.Module):
         self.pre_norm=pre_norm
         self.scale=scale
         self.patch_embed_super = PatchembedSuper(img_size=img_size, patch_size=patch_size,
-                                                 in_chans=in_chans, embed_dim=embed_dim)
+                                                 in_chans=in_chans, embed_dim=embed_dim, choices=choices)
         self.gp = gp
 
         # configs for the sampled subTransformer
@@ -84,8 +84,7 @@ class Vision_TransformerSuper(nn.Module):
 
         # self.pos_drop = nn.Dropout(p=drop_rate)
         if self.pre_norm:
-            self.norm = LayerNormSuper(super_embed_dim=embed_dim)
-
+            self.norm = LayerNormSuper(super_embed_dim=embed_dim, choices=choices)
 
         # classifier head
         self.head = LinearSuper(embed_dim, num_classes, choices=choices, name="head") if num_classes > 0 else nn.Identity()
@@ -314,11 +313,11 @@ class TransformerEncoderLayer(nn.Module):
         self.attn = AttentionSuper(
             dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop,
             proj_drop=dropout, scale=self.scale, relative_position=self.relative_position, change_qkv=change_qkv,
-            max_relative_position=max_relative_position
+            max_relative_position=max_relative_position, choices=choices
         )
 
-        self.attn_layer_norm = LayerNormSuper(self.super_embed_dim)
-        self.ffn_layer_norm = LayerNormSuper(self.super_embed_dim)
+        self.attn_layer_norm = LayerNormSuper(self.super_embed_dim, choices=choices)
+        self.ffn_layer_norm = LayerNormSuper(self.super_embed_dim, choices=choices)
         # self.dropout = dropout
         self.activation_fn = gelu
         # self.normalize_before = args.encoder_normalize_before
