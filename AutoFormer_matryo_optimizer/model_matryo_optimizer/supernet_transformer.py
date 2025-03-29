@@ -22,7 +22,7 @@ class Vision_TransformerSuper(nn.Module):
 
     def __init__(self, img_size=224, patch_size=16, in_chans=3, num_classes=1000, embed_dim=768, depth=12,
                  num_heads=12, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0.,
-                 drop_path_rate=0., pre_norm=True, scale=False, gp=False, relative_position=False, change_qkv=False, abs_pos = True, max_relative_position=14, choices=None):
+                 drop_path_rate=0., pre_norm=True, scale=False, gp=False, relative_position=False, change_qkv=False, abs_pos = True, max_relative_position=14):
         super(Vision_TransformerSuper, self).__init__()
         # the configs of super arch
         self.super_embed_dim = embed_dim
@@ -57,8 +57,6 @@ class Vision_TransformerSuper(nn.Module):
         self.sample_attn_dropout_prev = None
         self.sample_output_dim_prev = None
 
-        self.choices = choices
-
 
         self.blocks = nn.ModuleList()
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
@@ -69,7 +67,7 @@ class Vision_TransformerSuper(nn.Module):
                                                        attn_drop=attn_drop_rate, drop_path=dpr[i],
                                                        pre_norm=pre_norm, scale=self.scale,
                                                        change_qkv=change_qkv, relative_position=relative_position,
-                                                       max_relative_position=max_relative_position, choices=choices))
+                                                       max_relative_position=max_relative_position))
 
         # parameters for vision transformer
         num_patches = self.patch_embed_super.num_patches
@@ -88,60 +86,60 @@ class Vision_TransformerSuper(nn.Module):
 
 
         # classifier head
-        self.head = LinearSuper(embed_dim, num_classes, choices=choices, name="head") if num_classes > 0 else nn.Identity()
+        self.head = LinearSuper(embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
         self.apply(self._init_weights)
 
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
-
     # def _init_weights(self, m):
-    #     def is_bias(name):
-    #         return 'bias' in name
-
-    #     def init_param(p, is_bias):
-    #         if is_bias:
-    #             nn.init.constant_(p, 0)
-    #         else:
-    #             trunc_normal_(p, std=.02)
-
-    #     # 기본 nn.Linear와 nn.LayerNorm 초기화
     #     if isinstance(m, nn.Linear):
-    #         if hasattr(m, 'weight') and m.weight is not None:
-    #             trunc_normal_(m.weight, std=.02)
-    #         if hasattr(m, 'bias') and m.bias is not None:
+    #         trunc_normal_(m.weight, std=.02)
+    #         if isinstance(m, nn.Linear) and m.bias is not None:
     #             nn.init.constant_(m.bias, 0)
     #     elif isinstance(m, nn.LayerNorm):
-    #         if hasattr(m, 'weight') and m.weight is not None:
-    #             nn.init.constant_(m.weight, 1.0)
-    #         if hasattr(m, 'bias') and m.bias is not None:
-    #             nn.init.constant_(m.bias, 0)
+    #         nn.init.constant_(m.bias, 0)
+    #         nn.init.constant_(m.weight, 1.0)
 
-    #     # 사용자 정의 weight / bias 파라미터 초기화
-    #     for name in ['w1', 'w2', 'w3', 'w4', 'w5', 
-    #                 'bias1', 'bias2', 'bias3', 
-    #                 # 'v1', 'v2', 'v3',
-    #                 # 'h1', 'h2', 'h3'
-    #                 ]:
-    #         if hasattr(m, name):
-    #             param = getattr(m, name)
-    #             if param is not None:
-    #                 init_param(param, is_bias(name))
+    def _init_weights(self, m):
+        def is_bias(name):
+            return 'bias' in name
 
-    #     # proj 안의 파라미터도 마찬가지로 처리
-    #     if hasattr(m, 'proj'):
-    #         proj = m.proj
-    #         for name in ['w1', 'w2', 'w3', 'bias1', 'bias2', 'bias3']:
-    #             if hasattr(proj, name):
-    #                 param = getattr(proj, name)
-    #                 if param is not None:
-    #                     init_param(param, is_bias(name))
+        def init_param(p, is_bias):
+            if is_bias:
+                nn.init.constant_(p, 0)
+            else:
+                trunc_normal_(p, std=.02)
+
+        # 기본 nn.Linear와 nn.LayerNorm 초기화
+        if isinstance(m, nn.Linear):
+            if hasattr(m, 'weight') and m.weight is not None:
+                trunc_normal_(m.weight, std=.02)
+            if hasattr(m, 'bias') and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            if hasattr(m, 'weight') and m.weight is not None:
+                nn.init.constant_(m.weight, 1.0)
+            if hasattr(m, 'bias') and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+
+        # 사용자 정의 weight / bias 파라미터 초기화
+        for name in ['w1', 'w2', 'w3', 'w4', 'w5', 
+                    'bias1', 'bias2', 'bias3', 
+                    # 'v1', 'v2', 'v3',
+                    # 'h1', 'h2', 'h3'
+                    ]:
+            if hasattr(m, name):
+                param = getattr(m, name)
+                if param is not None:
+                    init_param(param, is_bias(name))
+
+        # proj 안의 파라미터도 마찬가지로 처리
+        if hasattr(m, 'proj'):
+            proj = m.proj
+            for name in ['w1', 'w2', 'w3', 'bias1', 'bias2', 'bias3']:
+                if hasattr(proj, name):
+                    param = getattr(proj, name)
+                    if param is not None:
+                        init_param(param, is_bias(name))
 
     @torch.jit.ignore
     def no_weight_decay(self):
@@ -275,7 +273,7 @@ class TransformerEncoderLayer(nn.Module):
 
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, dropout=0., attn_drop=0.,
                  drop_path=0., act_layer=nn.GELU, pre_norm=True, scale=False,
-                 relative_position=False, change_qkv=False, max_relative_position=14, choices=None):
+                 relative_position=False, change_qkv=False, max_relative_position=14):
         super().__init__()
 
         # the configs of super arch of the encoder, three dimension [embed_dim, mlp_ratio, and num_heads]
@@ -308,8 +306,6 @@ class TransformerEncoderLayer(nn.Module):
         self.sample_out_dim_prev = None
         self.sample_ffn_embed_dim_this_layer_prev = None
 
-        self.choices = choices
-
         self.is_identity_layer = None
         self.attn = AttentionSuper(
             dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop,
@@ -323,8 +319,8 @@ class TransformerEncoderLayer(nn.Module):
         self.activation_fn = gelu
         # self.normalize_before = args.encoder_normalize_before
 
-        self.fc1 = LinearSuper(super_in_dim=self.super_embed_dim, super_out_dim=self.super_ffn_embed_dim_this_layer, choices=choices, name="fc1")
-        self.fc2 = LinearSuper(super_in_dim=self.super_ffn_embed_dim_this_layer, super_out_dim=self.super_embed_dim, choices=choices, name="fc2")
+        self.fc1 = LinearSuper(super_in_dim=self.super_embed_dim, super_out_dim=self.super_ffn_embed_dim_this_layer)
+        self.fc2 = LinearSuper(super_in_dim=self.super_ffn_embed_dim_this_layer, super_out_dim=self.super_embed_dim)
 
 
     def set_sample_config(self, is_identity_layer, sample_embed_dim=None, sample_mlp_ratio=None, sample_num_heads=None, sample_dropout=None, sample_attn_dropout=None, sample_out_dim=None, sample_embed_dim_prev=None,

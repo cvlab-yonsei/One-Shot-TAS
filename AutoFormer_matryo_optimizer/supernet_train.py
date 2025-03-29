@@ -177,7 +177,7 @@ def get_args_parser():
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
-    parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
+    parser.add_argument('--dist_url', default='tcp://localhost:2042', help='url used to set up distributed training')
     parser.add_argument('--save_checkpoint_path', default='', help='save checkpoint to the path')
     parser.add_argument('--save_log_path', default='', help='save log file to the path')
 
@@ -262,6 +262,11 @@ def main(args):
 
     print(f"Creating SuperVisionTransformer")
     print(cfg)
+
+    
+    choices = {'num_heads': cfg.SEARCH_SPACE.NUM_HEADS, 'mlp_ratio': cfg.SEARCH_SPACE.MLP_RATIO,
+               'embed_dim': cfg.SEARCH_SPACE.EMBED_DIM , 'depth': cfg.SEARCH_SPACE.DEPTH}
+
     model = Vision_TransformerSuper(img_size=args.input_size,
                                     patch_size=args.patch_size,
                                     embed_dim=cfg.SUPERNET.EMBED_DIM, depth=cfg.SUPERNET.DEPTH,
@@ -272,10 +277,7 @@ def main(args):
                                     num_classes=args.nb_classes,
                                     max_relative_position=args.max_relative_position,
                                     relative_position=args.relative_position,
-                                    change_qkv=args.change_qkv, abs_pos=not args.no_abs_pos)
-
-    choices = {'num_heads': cfg.SEARCH_SPACE.NUM_HEADS, 'mlp_ratio': cfg.SEARCH_SPACE.MLP_RATIO,
-               'embed_dim': cfg.SEARCH_SPACE.EMBED_DIM , 'depth': cfg.SEARCH_SPACE.DEPTH}
+                                    change_qkv=args.change_qkv, abs_pos=not args.no_abs_pos, choices=choices)
 
     model.to(device)
     if args.teacher_model:
@@ -294,7 +296,6 @@ def main(args):
 
     model_without_ddp = model
     if args.distributed:
-
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module
 
@@ -303,8 +304,8 @@ def main(args):
 
     linear_scaled_lr = args.lr * args.batch_size * utils.get_world_size() / 512.0
     args.lr = linear_scaled_lr
-    # optimizer = create_optimizer(args, model_without_ddp)
-    optimizer = create_optimizer(args, [p for p in model_without_ddp.parameters() if p.requires_grad])
+    optimizer = create_optimizer(args, model_without_ddp)
+    # optimizer = create_optimizer(args, [p for p in model_without_ddp.parameters() if p.requires_grad])
     loss_scaler = NativeScaler()
     lr_scheduler, _ = create_scheduler(args, optimizer)
 
@@ -353,18 +354,19 @@ def main(args):
     print("Start training")
     start_time = time.time()
     max_accuracy = 0.0
+    prev_step_config = None
 
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
 
-        train_stats = train_one_epoch(
+        train_stats, prev_step_config = train_one_epoch(
             model, criterion, data_loader_train,
             optimizer, device, epoch, loss_scaler,
             args.clip_grad, model_ema, mixup_fn,
             amp=args.amp, teacher_model=teacher_model,
             teach_loss=teacher_loss,
-            choices=choices, mode = args.mode, retrain_config=retrain_config,
+            choices=choices, mode = args.mode, retrain_config=retrain_config, args=args, prev_step_config=prev_step_config
         )
 
         lr_scheduler.step(epoch)

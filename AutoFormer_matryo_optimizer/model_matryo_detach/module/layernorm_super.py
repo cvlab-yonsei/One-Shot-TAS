@@ -25,12 +25,22 @@ class LayerNormSuper(torch.nn.LayerNorm):
         return self.samples
 
     def _sample_parameters(self):
-        self.samples['weight'] = self.weight[:self.sample_embed_dim]
-        self.samples['bias'] = self.bias[:self.sample_embed_dim]
+        if self.sample_embed_dim_prev is None:
+            self.samples['weight'] = self.weight[:self.sample_embed_dim]
+            self.samples['bias'] = self.bias[:self.sample_embed_dim]
+        else:
+            frozen_weight = self.weight[:self.sample_embed_dim_prev].detach()
+            trainable_weight = self.weight[self.sample_embed_dim_prev:self.sample_embed_dim]
+            self.samples['weight'] = torch.cat([frozen_weight, trainable_weight], dim=0)
+
+            frozen_bias = self.bias[:self.sample_embed_dim_prev].detach()
+            trainable_bias = self.bias[self.sample_embed_dim_prev:self.sample_embed_dim]
+            self.samples['bias'] = torch.cat([frozen_bias, trainable_bias], dim=0)
         return self.samples
 
     def set_sample_config(self, sample_embed_dim, sample_embed_dim_prev=None):
         self.sample_embed_dim = sample_embed_dim
+        self.sample_embed_dim_prev = sample_embed_dim_prev
         self._sample_parameters()
 
     def forward(self, x):

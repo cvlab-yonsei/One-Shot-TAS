@@ -3,8 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
+from timm.models.layers import trunc_normal_
+
+
 class LinearSuper(nn.Linear):
-    def __init__(self, super_in_dim, super_out_dim, bias=True, uniform_=None, non_linear='linear', scale=False):
+    def __init__(self, super_in_dim, super_out_dim, bias=True, uniform_=None, non_linear='linear', scale=False, choices=None, name=None):
         super().__init__(super_in_dim, super_out_dim, bias=bias)
 
         # super_in_dim and super_out_dim indicate the largest network!
@@ -22,16 +25,120 @@ class LinearSuper(nn.Linear):
         self.weight_trainable_top_right = None  # 학습 가능한 weight (오른쪽 위)
         self.weight_trainable_bottom = None  # 학습 가능한 weight (아래쪽 전체)
 
-        self.w1 = nn.Parameter(torch.randn(super_out_dim, 0), requires_grad=False)
-        self.w2 = nn.Parameter(torch.randn(super_out_dim, super_in_dim), requires_grad=True)
-        self.w3 = nn.Parameter(torch.randn(0, super_in_dim), requires_grad=True)
+        self.weight.requires_grad = False
+        self.bias.requires_grad = False
 
-        self.bias1 = nn.Parameter(torch.rand(super_in_dim), requires_grad=False)
-        self.bias2 = nn.Parameter(torch.rand(0), requires_grad=True)
+        self.name = name
+        self.choices = choices
+
+        if choices is not None and name is not None:
+            if name == 'fc1' or name == 'fc2':
+                embed_dims = sorted(set(choices['embed_dim']))
+                mlp_ratios = sorted(set(choices['mlp_ratio']))
+                
+                # dim 0 기준 분할: embed_dim 기반
+                dim0_splits = embed_dims + [self.super_in_dim if name == 'fc1' else self.super_out_dim]  # 예: [192, 216, 240, super_out_dim]
+                
+                # dim 1 기준 분할: 모든 mlp_ratio * embed_dim 조합 (중복 제거 후 정렬)
+                dim1_sizes = set()
+                for e in embed_dims:
+                    for r in mlp_ratios:
+                        dim1_sizes.add(int(e * r))
+                dim1_splits = sorted(dim1_sizes) + [self.super_out_dim if name == 'fc1' else self.super_in_dim]
+
+                self.split_weights = nn.ParameterDict()
+
+                if name == 'fc1':
+                    dim1_splits_tmp = dim1_splits
+                    dim1_splits = dim0_splits
+                    dim0_splits = dim1_splits_tmp
+                    # print("dim0_splits : ", dim0_splits)
+                    # print("dim1_splits : ", dim1_splits)
+                    for i in range(len(dim0_splits)):
+                        for j in range(len(dim1_splits)):
+                            start_dim0 = 0 if i == 0 else dim0_splits[i - 1]
+                            end_dim0 = dim0_splits[i]
+                            start_dim1 = 0 if j == 0 else dim1_splits[j - 1]
+                            end_dim1 = dim1_splits[j]
+                            shape = (end_dim0 - start_dim0, end_dim1 - start_dim1) 
+                            param_name = f'w{i+1}_{j+1}'
+                            # self.split_weights[param_name] = nn.Parameter(torch.zeros(shape))
+                            self.split_weights[param_name] = nn.Parameter(torch.empty(shape))
+                            self._init_split_param(self.split_weights[param_name])  # 초기화
+
+                    # print(f"Split fc1 into {len(dim0_splits)}x{len(dim1_splits)} nn.Parameters.")
+
+                    self.split_bias = nn.ParameterDict()
+                    for i in range(len(dim0_splits)):
+                        start = dim0_splits[i - 1] if i > 0 else 0
+                        end = dim0_splits[i]
+                        key = f'bias_{i+1}'
+                        # self.split_bias[key] = nn.Parameter(torch.zeros(end - start))
+                        self.split_bias[key] = nn.Parameter(torch.empty(end - start))
+                        self._init_split_param(self.split_bias[key], is_bias=True)
+
+                else:
+                    for i in range(len(dim0_splits)):
+                        for j in range(len(dim1_splits)):
+                            start_dim0 = 0 if i == 0 else dim0_splits[i - 1]
+                            end_dim0 = dim0_splits[i]
+                            start_dim1 = 0 if j == 0 else dim1_splits[j - 1]
+                            end_dim1 = dim1_splits[j]
+                            shape = (end_dim0 - start_dim0, end_dim1 - start_dim1)
+                            param_name = f'w{i+1}_{j+1}'
+                            # self.split_weights[param_name] = nn.Parameter(torch.zeros(shape))
+                            self.split_weights[param_name] = nn.Parameter(torch.empty(shape))
+                            self._init_split_param(self.split_weights[param_name])  # 초기화
+
+                    # print(f"Split fc2 into {len(dim0_splits)}x{len(dim1_splits)} nn.Parameters.")
+
+                    self.split_bias = nn.ParameterDict()
+                    for i in range(len(dim0_splits)):
+                        start = dim0_splits[i - 1] if i > 0 else 0
+                        end = dim0_splits[i]
+                        key = f'bias_{i+1}'
+                        # self.split_bias[key] = nn.Parameter(torch.zeros(end - start))
+                        self.split_bias[key] = nn.Parameter(torch.empty(end - start))
+                        self._init_split_param(self.split_bias[key], is_bias=True)
+
+
+            elif name == 'head':
+                embed_dims = sorted(set(choices['embed_dim']))
+
+                # dim 1 기준: embed_dim 기준으로 쪼개기
+                dim1_splits = embed_dims + [self.super_in_dim]  # dim=1은 input 방향
+
+                self.split_weights = nn.ParameterDict()
+                for j in range(len(dim1_splits)):
+                    start_dim1 = 0 if j == 0 else dim1_splits[j - 1]
+                    end_dim1 = dim1_splits[j]
+                    shape = (self.super_out_dim, end_dim1 - start_dim1)  # dim=0은 전체 사용
+                    param_name = f'w1_{j+1}'
+                    # self.split_weights[param_name] = nn.Parameter(torch.zeros(shape))
+                    self.split_weights[param_name] = nn.Parameter(torch.empty(shape))
+                    self._init_split_param(self.split_weights[param_name])  # 초기화
+
+                # bias는 고정
+                self.split_bias = nn.ParameterDict()
+                # self.split_bias['bias'] = nn.Parameter(torch.zeros(self.super_out_dim))
+                self.split_bias['bias'] = nn.Parameter(torch.empty(self.super_out_dim))
+                self._init_split_param(self.split_bias['bias'], is_bias=True)
+
+                # print(f"Split head into 1x{len(dim1_splits)} weight segments and 1 bias.")
+
+        # self.w1 = nn.Parameter(self.weight.data.clone(), requires_grad=True)
+        
+        # self.bias1 = nn.Parameter(self.bias.data.clone(), requires_grad=True)
 
         self.scale = scale
         self._reset_parameters(bias, uniform_, non_linear)
         self.profiling = False
+
+    def _init_split_param(self, param, is_bias=False):
+        if is_bias:
+            nn.init.constant_(param, 0)
+        else:
+            trunc_normal_(param, std=0.02)
 
     def profile(self, mode=True):
         self.profiling = mode
@@ -57,28 +164,19 @@ class LinearSuper(nn.Linear):
         self._sample_parameters()
 
     def _sample_parameters(self):
-        self.samples['weight'] = sample_weight(self, self.weight, self.sample_in_dim, self.sample_out_dim, self.sample_in_dim_prev, self.sample_out_dim_prev)
+        self.samples['weight'] = sample_weight(self, self.sample_in_dim, self.sample_out_dim, self.sample_in_dim_prev, self.sample_out_dim_prev)
         self.samples['bias'] = self.bias
         self.sample_scale = self.super_out_dim/self.sample_out_dim
         if self.bias is not None:
-            self.samples['bias'] = sample_bias(self.bias, self.sample_out_dim, self.sample_out_dim_prev)
+            self.samples['bias'] = sample_bias(self, self.sample_out_dim, self.sample_out_dim_prev)
         return self.samples
-    
-    @property
-    def weight(self):
-        top = torch.cat([self.w1, self.w2], dim=1)
-        full = torch.cat([top, self.w3], dim=0)
-        return full
-    
-    @property
-    def bias(self):
-        full = torch.cat([self.bias1, self.bias2], dim=0)
-        return full
 
     def forward(self, x):
         self.sample_parameters()
-        return F.linear(x, self.weight, self.bias) * (self.sample_scale if self.scale else 1)
-        # return F.linear(x, self.samples['weight'], self.samples['bias']) * (self.sample_scale if self.scale else 1)
+        # print("self.samples['weight'].shape : ", self.samples['weight'].shape)
+        # print("self.samples['bias'].shape : ", self.samples['bias'].shape)
+        # return F.linear(x, self.w1, self.bias1) * (self.sample_scale if self.scale else 1)
+        return F.linear(x, self.samples['weight'], self.samples['bias']) * (self.sample_scale if self.scale else 1)
 
     def calc_sampled_param_num(self):
         assert 'weight' in self.samples.keys()
@@ -95,103 +193,104 @@ class LinearSuper(nn.Linear):
         total_flops += sequence_length *  np.prod(self.samples['weight'].size())
         return total_flops
 
-def sample_weight(self, weight, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, sample_out_dim_prev=None):
-    """
-    weight: 원본 weight tensor, shape = (total_out_dim, total_in_dim)
-    sample_in_dim: 최종으로 사용할 입력 차원 (columns)
-    sample_out_dim: 최종으로 사용할 출력 차원 (rows)
-    sample_in_dim_prev: 이전 단계에서 사용된 입력 차원 (freeze할 영역, columns)
-    sample_out_dim_prev: 이전 단계에서 사용된 출력 차원 (freeze할 영역, rows)
-    
-    반환:
-        최종적으로 샘플링된 weight tensor.
-        - 만약 sample_in_dim_prev와 sample_out_dim_prev가 둘 다 제공되지 않으면,
-          단순히 [sample_out_dim, sample_in_dim] 영역을 반환합니다.
-        - 하나라도 None이면, 각각 sample_in_dim, sample_out_dim으로 대체하여
-          왼쪽 위 영역은 detach()를 통해 frozen 처리되고,
-          나머지 영역은 trainable하게 남습니다.
-    """
-    # print("_prev None check LinearSuper sample_weight: ", sample_in_dim_prev, sample_out_dim_prev)
+# 수정된 sample_weight 함수로, 주어진 법칙대로 requires_grad를 설정함
 
-    full_top = torch.cat([self.w1, self.w2], dim=1)
-    full_weight = torch.cat([full_top, self.w2], dim=0)
+def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, sample_out_dim_prev=None):
+    name = self.name
+    choices = self.choices
 
-    # 최종 영역 슬라이싱
-    sampled_weight = weight[:, :sample_in_dim]
-    sampled_weight = sampled_weight[:sample_out_dim, :]
+    dim0_splits = [self.super_out_dim]
+    dim1_splits = [self.super_in_dim]
 
-    # 둘 다 None이면 그냥 반환
-    #일단 휴리스틱하게.. (num_class인경우)
-    if (sample_in_dim_prev is None and sample_out_dim_prev is None) or (sample_in_dim_prev is None and sample_out_dim_prev == 1000): # 여기만 다르게
-        new_w1 = torch.randn(0, 0)
-        new_w2 = full_weight[:sample_out_dim, :sample_in_dim].clone()
-        new_w3 = torch.randn(0, 0)
+    if name in ['fc1', 'fc2']:
+        embed_dims = sorted(set(choices['embed_dim']))
+        mlp_ratios = sorted(set(choices['mlp_ratio']))
 
-        self.w1 = nn.Parameter(new_w1, requires_grad=False)
-        self.w2 = nn.Parameter(new_w2, requires_grad=True)
-        self.w3 = nn.Parameter(new_w3, requires_grad=True)
+        dim_embed = embed_dims + [self.super_in_dim if name == 'fc1' else self.super_out_dim]
+        dim_mlp = sorted({int(e * r) for e in embed_dims for r in mlp_ratios})
+        dim_mlp += [self.super_out_dim if name == 'fc1' else self.super_in_dim]
 
-        return sampled_weight
+        if name == 'fc1':
+            dim0_splits = dim_mlp
+            dim1_splits = dim_embed
+        else:
+            dim0_splits = dim_embed
+            dim1_splits = dim_mlp
 
-    # None인 경우 각각 대체
-    if sample_in_dim_prev is None:
-        sample_in_dim_prev = sample_in_dim
-    if sample_out_dim_prev is None:
-        sample_out_dim_prev = sample_out_dim
+        i_active = next(i for i, val in enumerate(dim0_splits) if val >= sample_out_dim)
+        j_active = next(j for j, val in enumerate(dim1_splits) if val >= sample_in_dim)
 
-    new_w1 = full_weight[:sample_out_dim_prev, :sample_in_dim_prev].detach()
-    new_w2 = full_weight[:sample_out_dim_prev, sample_in_dim_prev:sample_in_dim].clone()
-    new_w3 = full_weight[sample_out_dim_prev:sample_out_dim, :].clone()
+        for i in range(len(dim0_splits)):
+            for j in range(len(dim1_splits)):
+                key = f'w{i+1}_{j+1}'
+                self.split_weights[key].requires_grad = (i == i_active and j == j_active)
 
-    self.w1 = nn.Parameter(new_w1, requires_grad=False)
-    self.w2 = nn.Parameter(new_w2, requires_grad=True)
-    self.w3 = nn.Parameter(new_w3, requires_grad=True)
+    elif name == 'head':
+        embed_dims = sorted(set(choices['embed_dim']))
+        dim1_splits = embed_dims + [self.super_in_dim]
 
-    # 왼쪽 위 (frozen): rows 0:sample_out_dim_prev, cols 0:sample_in_dim_prev
-    frozen = sampled_weight[:sample_out_dim_prev, :sample_in_dim_prev].detach()
-    # 오른쪽 위 (trainable): rows 0:sample_out_dim_prev, cols sample_in_dim_prev:sample_in_dim
-    top_right = sampled_weight[:sample_out_dim_prev, sample_in_dim_prev:sample_in_dim]
-    # 아래쪽 전체 (trainable): rows sample_out_dim_prev:sample_out_dim, 모든 columns
-    bottom = sampled_weight[sample_out_dim_prev:sample_out_dim, :]
-    
-    # 상단 부분 결합 (frozen와 trainable 영역)
-    top_combined = torch.cat([frozen, top_right], dim=1)
-    # 최종 weight 결합: 상단 + 아래쪽
-    sampled_weight = torch.cat([top_combined, bottom], dim=0)
-    
-    return sampled_weight
+        j_active = next(j for j, val in enumerate(dim1_splits) if val >= sample_in_dim)
+
+        for j in range(len(dim1_splits)):
+            key = f'w1_{j+1}'
+            self.split_weights[key].requires_grad = (j == j_active)
+
+    # weight 조립
+    row_blocks = []
+    for i in range(len(dim0_splits)):
+        col_blocks = []
+        for j in range(len(dim1_splits)):
+            key = f'w{i+1}_{j+1}'
+            col_blocks.append(self.split_weights[key])
+        row_blocks.append(torch.cat(col_blocks, dim=1))
+    full_weight = torch.cat(row_blocks, dim=0)
+
+    sample_weight = full_weight[:sample_out_dim, :sample_in_dim]
+
+    # print(f"\n[🔍 {self.name} - Weight requires_grad status]")
+    # for key in self.split_weights:
+    #     print(f"  {key:10s} -> {self.split_weights[key].requires_grad}")
+
+    return sample_weight
 
 
-def sample_bias(self, bias, sample_out_dim, sample_out_dim_prev=None):
-    """
-    bias: 원본 bias tensor, shape = (total_out_dim,)
-    sample_out_dim: 최종으로 사용할 출력 차원 (elements)
-    sample_out_dim_prev: 이전 단계에서 사용된 출력 차원 (freeze할 영역, elements)
-    
-    반환:
-        최종적으로 샘플링된 bias tensor.
-        만약 sample_out_dim_prev가 제공되면, 앞쪽 영역은 detach()를 통해 frozen 처리됩니다.
-    """
-    
-    # print("_prev None check LinearSuper sample_bias : ", sample_out_dim_prev)
-    full_bias = torch.cat([self.bias1, self.bias2], dim=0)
-    new_bias1 = []
-    new_bias2 = full_bias[:sample_out_dim]
-    self.bias1 = nn.Parameter(new_bias1, requires_grad=False)
-    self.bias2 = nn.Parameter(new_bias2, requires_grad=True)
+def sample_bias(self, sample_out_dim, sample_out_dim_prev=None):
+    name = self.name
+    choices = self.choices
 
-    sampled_bias = bias[:sample_out_dim]
+    if name in ['fc1', 'fc2']:
+        embed_dims = sorted(set(choices['embed_dim']))
+        mlp_ratios = sorted(set(choices['mlp_ratio']))
 
-    if sample_out_dim_prev is not None:
-        new_bias1 = full_bias[:sample_out_dim_prev].detach()
-        new_bias2 = full_bias[sample_out_dim_prev:sample_out_dim]
+        if name == 'fc1':
+            dim0_sizes = sorted({int(e * r) for e in embed_dims for r in mlp_ratios})
+            dim0_sizes += [self.super_out_dim]
+        else:
+            dim0_sizes = embed_dims + [self.super_out_dim]
 
-        self.bias1 = nn.Parameter(new_bias1, requires_grad=False)
-        self.bias2 = nn.Parameter(new_bias2, requires_grad=True)
+        i_active = next(i for i, val in enumerate(dim0_sizes) if val >= sample_out_dim)
 
-        frozen = sampled_bias[:sample_out_dim_prev].detach()
-        trainable = sampled_bias[sample_out_dim_prev:sample_out_dim]
-        sampled_bias = torch.cat([frozen, trainable], dim=0)
-    return sampled_bias
+        collected_bias = []
+        for i in range(len(dim0_sizes)):
+            key = f'bias_{i+1}'
+            self.split_bias[key].requires_grad = (i == i_active)
+            collected_bias.append(self.split_bias[key])
 
+        full_bias = torch.cat(collected_bias, dim=0)
+        sample_bias = full_bias[:sample_out_dim]
 
+        # print(f"\n[🔍 {self.name} - Bias requires_grad status]")
+        # for key in self.split_bias:
+        #     print(f"  {key:10s} -> {self.split_bias[key].requires_grad}")
+
+        return sample_bias
+
+    elif name == 'head':
+        self.split_bias['bias'].requires_grad = True
+        sample_bias = self.split_bias['bias'][:sample_out_dim]
+
+        # print(f"\n[🔍 {self.name} - Bias requires_grad status]")
+        # for key in self.split_bias:
+        #     print(f"  {key:10s} -> {self.split_bias[key].requires_grad}")
+
+        return sample_bias

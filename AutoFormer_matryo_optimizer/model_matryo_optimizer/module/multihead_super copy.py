@@ -3,7 +3,6 @@ from torch import nn
 from torch.nn import Parameter
 import torch.nn.functional as F
 from .Linear_super import LinearSuper
-from .Linear_super_original import LinearSuperOriginal
 from .qkv_super import qkv_super
 from ..utils import trunc_normal_
 def softmax(x, dim, onnx_trace=False):
@@ -14,9 +13,10 @@ def softmax(x, dim, onnx_trace=False):
 
 class RelativePosition2D_super(nn.Module):
 
-    def __init__(self, num_units, max_relative_position):
+    def __init__(self, num_units, max_relative_position, super_embed_dim=None):
         super().__init__()
-
+        
+        self.super_embed_dim = super_embed_dim
         self.num_units = num_units
         self.max_relative_position = max_relative_position
         # The first element in embeddings_table_v is the vertical embedding for the class
@@ -26,17 +26,93 @@ class RelativePosition2D_super(nn.Module):
         trunc_normal_(self.embeddings_table_v, std=.02)
         trunc_normal_(self.embeddings_table_h, std=.02)
 
+        self.v1 = nn.Parameter(torch.rand(max_relative_position * 2 + 2, super_embed_dim//2), requires_grad=False)
+        self.v2 = nn.Parameter(torch.rand(max_relative_position * 2 + 2, super_embed_dim//4), requires_grad=True)
+        self.v3 = nn.Parameter(torch.rand(max_relative_position * 2 + 2, super_embed_dim//4), requires_grad=False)
+
+        self.h1 = nn.Parameter(torch.rand(max_relative_position * 2 + 2, super_embed_dim//2), requires_grad=False)
+        self.h2 = nn.Parameter(torch.rand(max_relative_position * 2 + 2, super_embed_dim//4), requires_grad=True)
+        self.h3 = nn.Parameter(torch.rand(max_relative_position * 2 + 2, super_embed_dim//4), requires_grad=False)
+
+        trunc_normal_(self.v1, std=.02)
+        trunc_normal_(self.v2, std=.02)
+        trunc_normal_(self.v3, std=.02)
+        trunc_normal_(self.h1, std=.02)
+        trunc_normal_(self.h2, std=.02)
+        trunc_normal_(self.h3, std=.02)
+
         self.sample_head_dim = None
         self.sample_embeddings_table_h = None
         self.sample_embeddings_table_v = None
 
     def set_sample_config(self, sample_head_dim, sample_head_dim_prev=None):
         self.sample_head_dim = sample_head_dim
-        self.sample_embeddings_table_h = self.embeddings_table_h[:,:sample_head_dim]
-        self.sample_embeddings_table_v = self.embeddings_table_v[:,:sample_head_dim]
+
+        full_v = torch.cat([self.v1, self.v2], dim=1)
+        full_v_out = torch.cat([full_v, self.v3], dim=1)
+        
+        full_h = torch.cat([self.h1, self.h2], dim=1)
+        full_h_out = torch.cat([full_h, self.h3], dim=1)
+
+        if sample_head_dim_prev is None:
+            new_v1 = torch.empty(0, device=self.weight.device)
+            new_v2 = full_v_out[..., :sample_head_dim]
+            new_v3 = full_v_out[..., sample_head_dim:self.super_embed_dim]
+            self.v1 = nn.Parameter(new_v1, requires_grad=False)
+            self.v2 = nn.Parameter(new_v2, requires_grad=True)
+            self.v3 = nn.Parameter(new_v3, requires_grad=False)
+
+            new_h1 = torch.empty(0, device=self.bias.device)
+            new_h2 = full_h_out[..., :sample_head_dim]
+            new_h3 = full_h_out[..., sample_head_dim:self.super_embed_dim]
+            self.h1 = nn.Parameter(new_h1, requires_grad=False)
+            self.h2 = nn.Parameter(new_h2, requires_grad=True)
+            self.h3 = nn.Parameter(new_h3, requires_grad=False)
+
+            self.sample_embeddings_table_h = self.embeddings_table_h[:, :sample_head_dim]
+            self.sample_embeddings_table_v = self.embeddings_table_v[:, :sample_head_dim]
+        else:
+            new_v1 = full_v_out[..., :sample_head_dim_prev].detach()
+            new_v2 = full_v_out[..., sample_head_dim_prev:sample_head_dim]
+            new_v3 = full_v_out[..., sample_head_dim:self.super_embed_dim].detach()
+            self.v1 = nn.Parameter(new_v1, requires_grad=False)
+            self.v2 = nn.Parameter(new_v2, requires_grad=True)
+            self.v3 = nn.Parameter(new_v3, requires_grad=False)
+
+            new_h1 = full_h_out[..., :sample_head_dim_prev].detach()
+            new_h2 = full_h_out[..., sample_head_dim_prev:sample_head_dim]
+            new_h3 = full_h_out[..., sample_head_dim:self.super_embed_dim].detach()
+            self.h1 = nn.Parameter(new_h1, requires_grad=False)
+            self.h2 = nn.Parameter(new_h2, requires_grad=True)
+            self.h3 = nn.Parameter(new_h3, requires_grad=False)
+
+            frozen_h = self.embeddings_table_h[:, :sample_head_dim_prev].detach()
+            trainable_h = self.embeddings_table_h[:, sample_head_dim_prev:sample_head_dim]
+            self.sample_embeddings_table_h = torch.cat([frozen_h, trainable_h], dim=1)
+
+            frozen_v = self.embeddings_table_v[:, :sample_head_dim_prev].detach()
+            trainable_v = self.embeddings_table_v[:, sample_head_dim_prev:sample_head_dim]
+            self.sample_embeddings_table_v = torch.cat([frozen_v, trainable_v], dim=1)
+
 
     def calc_sampled_param_num(self):
         return self.sample_embeddings_table_h.numel() + self.sample_embeddings_table_v.numel()
+
+    @property
+    def embeddings_table_v(self):
+        # frozen bias가 없으면, bias1은 빈 텐서.
+        if self.v1.numel() == 0:
+            return self.v2
+        else:
+            return torch.cat([self.v1, self.v2], dim=1)
+
+    @property
+    def embeddings_table_h(self):
+        # frozen bias가 없으면, bias1은 빈 텐서.
+        if self.h1.numel() == 0:
+            return self.h2
+        else:
+            return torch.cat([self.h1, self.h2], dim=1)
 
     def forward(self, length_q, length_k):
         # remove the first cls token distance computation
@@ -62,7 +138,8 @@ class RelativePosition2D_super(nn.Module):
         final_mat_v = final_mat_v.long()
         final_mat_h = final_mat_h.long()
         # get the embeddings with the corresponding distance
-        embeddings = self.sample_embeddings_table_v[final_mat_v] + self.sample_embeddings_table_h[final_mat_h]
+        embeddings = self.embeddings_table_v[final_mat_v] + self.embeddings_table_h[final_mat_h]
+        # embeddings = self.sample_embeddings_table_v[final_mat_v] + self.sample_embeddings_table_h[final_mat_h]
 
         return embeddings
 
@@ -80,12 +157,12 @@ class AttentionSuper(nn.Module):
         if change_qkv:
             self.qkv = qkv_super(super_embed_dim, 3 * super_embed_dim, bias=qkv_bias)
         else:
-            self.qkv = LinearSuperOriginal(super_embed_dim, 3 * super_embed_dim, bias=qkv_bias)
+            self.qkv = LinearSuper(super_embed_dim, 3 * super_embed_dim, bias=qkv_bias)
 
         self.relative_position = relative_position
         if self.relative_position:
-            self.rel_pos_embed_k = RelativePosition2D_super(super_embed_dim //num_heads, max_relative_position)
-            self.rel_pos_embed_v = RelativePosition2D_super(super_embed_dim //num_heads, max_relative_position)
+            self.rel_pos_embed_k = RelativePosition2D_super(super_embed_dim //num_heads, max_relative_position, super_embed_dim)
+            self.rel_pos_embed_v = RelativePosition2D_super(super_embed_dim //num_heads, max_relative_position, super_embed_dim)
         self.max_relative_position = max_relative_position
         self.sample_qk_embed_dim = None
         self.sample_v_embed_dim = None
@@ -99,7 +176,7 @@ class AttentionSuper(nn.Module):
         self.sample_scale_prev = None
         self.sample_in_embed_dim_prev = None
 
-        self.proj = LinearSuperOriginal(super_embed_dim, super_embed_dim)
+        self.proj = LinearSuper(super_embed_dim, super_embed_dim)
 
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj_drop = nn.Dropout(proj_drop)
@@ -144,10 +221,8 @@ class AttentionSuper(nn.Module):
                 self.sample_scale_prev = None
 
 
-        # self.qkv.set_sample_config(sample_in_dim=sample_in_embed_dim, sample_out_dim=3*self.sample_qk_embed_dim, sample_in_dim_prev=sample_in_embed_dim_prev, sample_out_dim_prev=(3*self.sample_qk_embed_dim_prev) if self.sample_qk_embed_dim_prev is not None else None)
-        # self.proj.set_sample_config(sample_in_dim=self.sample_qk_embed_dim, sample_out_dim=sample_in_embed_dim, sample_in_dim_prev=self.sample_qk_embed_dim_prev, sample_out_dim_prev=self.sample_in_embed_dim_prev)
-        self.qkv.set_sample_config(sample_in_dim=sample_in_embed_dim, sample_out_dim=3*self.sample_qk_embed_dim) 
-        self.proj.set_sample_config(sample_in_dim=self.sample_qk_embed_dim, sample_out_dim=sample_in_embed_dim)
+        self.qkv.set_sample_config(sample_in_dim=sample_in_embed_dim, sample_out_dim=3*self.sample_qk_embed_dim, sample_in_dim_prev=sample_in_embed_dim_prev, sample_out_dim_prev=(3*self.sample_qk_embed_dim_prev) if self.sample_qk_embed_dim_prev is not None else None)
+        self.proj.set_sample_config(sample_in_dim=self.sample_qk_embed_dim, sample_out_dim=sample_in_embed_dim, sample_in_dim_prev=self.sample_qk_embed_dim_prev, sample_out_dim_prev=self.sample_in_embed_dim_prev)
         
         if sample_num_heads_prev is None:
             sample_num_heads_prev = sample_num_heads
