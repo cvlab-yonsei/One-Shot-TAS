@@ -330,7 +330,8 @@ def sample_configs_curriculum(choices, epoch=None):
     import random
 
     config = {}
-    depth = random.choice(choices['depth'])
+    # depth = random.choice(choices['depth'])
+    depth = 14
 
     config_list = [
         (192, 3, 4.0),
@@ -381,9 +382,9 @@ def sample_configs_curriculum(choices, epoch=None):
 
         # 확률 기반 샘플링
         head_choices = [preferred_head, 4 if preferred_head == 3 else 3]
-        head_weights = [2, 1]
+        head_weights = [1, 0] # 2, 1
         mlp_choices = [preferred_mlp, 3.5 if preferred_mlp == 4.0 else 4.0]
-        mlp_weights = [2, 1]
+        mlp_weights = [1, 0] # 2, 1
 
         config['embed_dim'] = [embed_dim] * depth
         config['num_heads'] = [
@@ -485,6 +486,9 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     config = sample_configs_curriculum(choices=choices, epoch=epoch)
     prev_config = get_previous_config(config=config, choices=choices) # None 처리 잘되는거 확인
 
+    init_done = False
+
+
     for samples, targets in metric_logger.log_every(data_loader, print_freq, header):
         samples = samples.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
@@ -497,7 +501,11 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             # config = sample_configs_curriculum(choices=choices, epoch=epoch)
             # prev_config = get_previous_config(config=config, choices=choices) # None 처리 잘되는거 확인
             model_module = unwrap_model(model)
-            model_module.set_sample_config(config=config, config_prev=prev_config)
+            # pretrained = prev_step_config is None and init_done == False
+            pretrained = False
+            # print("supernet_engine : ", pretrained)
+            model_module.set_sample_config(config=config, config_prev=prev_config, pretrained=pretrained)
+            init_done = True
             # model_module.set_sample_config(config=config)
 
             if config != prev_step_config:

@@ -154,21 +154,23 @@ class LinearSuper(nn.Linear):
         if bias:
             nn.init.constant_(self.bias, 0.)
 
-    def set_sample_config(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, sample_out_dim_prev=None):
+    def set_sample_config(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, sample_out_dim_prev=None, pretrained=False):
         # print("_prev None check LinearSuper : ", sample_in_dim_prev, sample_out_dim_prev)
         self.sample_in_dim = sample_in_dim
         self.sample_out_dim = sample_out_dim
         self.sample_in_dim_prev = sample_in_dim_prev
         self.sample_out_dim_prev = sample_out_dim_prev
 
+        self.pretrained = pretrained
+
         self._sample_parameters()
 
     def _sample_parameters(self):
-        self.samples['weight'] = sample_weight(self, self.sample_in_dim, self.sample_out_dim, self.sample_in_dim_prev, self.sample_out_dim_prev)
+        self.samples['weight'] = sample_weight(self, self.sample_in_dim, self.sample_out_dim, self.sample_in_dim_prev, self.sample_out_dim_prev, pretrained=self.pretrained)
         self.samples['bias'] = self.bias
         self.sample_scale = self.super_out_dim/self.sample_out_dim
         if self.bias is not None:
-            self.samples['bias'] = sample_bias(self, self.sample_out_dim, self.sample_out_dim_prev)
+            self.samples['bias'] = sample_bias(self, self.sample_out_dim, self.sample_out_dim_prev, pretrained=self.pretrained)
         return self.samples
 
     def forward(self, x):
@@ -195,12 +197,13 @@ class LinearSuper(nn.Linear):
 
 # 수정된 sample_weight 함수로, 주어진 법칙대로 requires_grad를 설정함
 
-def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, sample_out_dim_prev=None):
+def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, sample_out_dim_prev=None, pretrained=False):
     name = self.name
     choices = self.choices
 
     dim0_splits = [self.super_out_dim]
     dim1_splits = [self.super_in_dim]
+    # print("sample_weight : ", pretrained)
 
     if name in ['fc1', 'fc2']:
         embed_dims = sorted(set(choices['embed_dim']))
@@ -220,6 +223,16 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
         i_active = next(i for i, val in enumerate(dim0_splits) if val >= sample_out_dim)
         j_active = next(j for j, val in enumerate(dim1_splits) if val >= sample_in_dim)
 
+        if pretrained:
+            # print("pretrained_weight")
+            ref = self.split_weights['w1_1']
+            mean, std = ref.mean().item(), ref.std().item()
+            for i in range(len(dim0_splits)):
+                for j in range(len(dim1_splits)):
+                    key = f'w{i+1}_{j+1}'
+                    if key != 'w1_1':
+                        nn.init.normal_(self.split_weights[key], mean=mean, std=std)
+
         for i in range(len(dim0_splits)):
             for j in range(len(dim1_splits)):
                 key = f'w{i+1}_{j+1}'
@@ -230,6 +243,15 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
         dim1_splits = embed_dims + [self.super_in_dim]
 
         j_active = next(j for j, val in enumerate(dim1_splits) if val >= sample_in_dim)
+
+        if pretrained:
+            # print("pretrained_weight")
+            ref = self.split_weights['w1_1']
+            mean, std = ref.mean().item(), ref.std().item()
+            for j in range(len(dim1_splits)):
+                key = f'w1_{j+1}'
+                if key != 'w1_1':
+                    nn.init.normal_(self.split_weights[key], mean=mean, std=std)
 
         for j in range(len(dim1_splits)):
             key = f'w1_{j+1}'
@@ -254,7 +276,7 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
     return sample_weight
 
 
-def sample_bias(self, sample_out_dim, sample_out_dim_prev=None):
+def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False):
     name = self.name
     choices = self.choices
 
@@ -269,6 +291,15 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None):
             dim0_sizes = embed_dims + [self.super_out_dim]
 
         i_active = next(i for i, val in enumerate(dim0_sizes) if val >= sample_out_dim)
+
+        if pretrained:
+            # print("pretrained_weight")
+            ref = self.split_bias['bias_1']
+            mean, std = ref.mean().item(), ref.std().item()
+            for i in range(len(dim0_sizes)):
+                key = f'bias_{i+1}'
+                if key != 'bias_1':
+                    nn.init.normal_(self.split_bias[key], mean=mean, std=std)
 
         collected_bias = []
         for i in range(len(dim0_sizes)):
