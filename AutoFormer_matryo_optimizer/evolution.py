@@ -94,8 +94,8 @@ class EvolutionSearcher(object):
         sampled_config['embed_dim'] = [embed_dim]*depth
         n_parameters = self.model_without_ddp.get_sampled_params_numel(sampled_config)
         info['params'] =  n_parameters / 10.**6
-
-        if info['params'] > self.parameters_limits:
+#  and (depth != 14)
+        if (info['params'] > self.parameters_limits): # and depth != 14 내가 그냥 추가
             print('parameters limit exceed')
             return False
 
@@ -452,7 +452,7 @@ def get_args_parser():
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
-    parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
+    parser.add_argument('--dist_url', default='tcp://localhost:2040', help='url used to set up distributed training')
     parser.add_argument('--amp', action='store_true')
     parser.add_argument('--no-amp', action='store_false', dest='amp')
     parser.set_defaults(amp=True)
@@ -522,6 +522,13 @@ def main(args):
         sampler=sampler_val, num_workers=args.num_workers,
         pin_memory=args.pin_mem, drop_last=False
     )
+    
+    # choices = {'num_heads': cfg.SEARCH_SPACE.NUM_HEADS, 'mlp_ratio': cfg.SEARCH_SPACE.MLP_RATIO,
+    #            'embed_dim': cfg.SEARCH_SPACE.EMBED_DIM , 'depth': cfg.SEARCH_SPACE.DEPTH}
+    choices = {'num_heads': cfg.SEARCH_SPACE.NUM_HEADS, 'mlp_ratio': cfg.SEARCH_SPACE.MLP_RATIO,
+                'embed_dim': cfg.SEARCH_SPACE.EMBED_DIM , 'depth': [14]}
+
+
 
     print(f"Creating SuperVisionTransformer")
     print(cfg)
@@ -535,7 +542,7 @@ def main(args):
                                     num_classes=args.nb_classes,
                                     max_relative_position=args.max_relative_position,
                                     relative_position=args.relative_position,
-                                    change_qkv=args.change_qkv, abs_pos=not args.no_abs_pos)
+                                    change_qkv=args.change_qkv, abs_pos=not args.no_abs_pos, choices=choices)
 
     model.to(device)
     model_without_ddp = model
@@ -554,9 +561,6 @@ def main(args):
             checkpoint = torch.load(args.resume, map_location='cpu')
         print("resume from checkpoint: {}".format(args.resume))
         model_without_ddp.load_state_dict(checkpoint['model'])
-
-    choices = {'num_heads': cfg.SEARCH_SPACE.NUM_HEADS, 'mlp_ratio': cfg.SEARCH_SPACE.MLP_RATIO,
-               'embed_dim': cfg.SEARCH_SPACE.EMBED_DIM , 'depth': cfg.SEARCH_SPACE.DEPTH}
 
 
     t = time.time()

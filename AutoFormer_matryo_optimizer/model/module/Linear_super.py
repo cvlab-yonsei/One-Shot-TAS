@@ -247,13 +247,50 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
             dim0_splits = dim_embed
             dim1_splits = dim_mlp
 
+        # 현재 config에 해당하는 (embed_dim, mlp_ratio) 페어 구하기
+        current_pair = None
+        for e in embed_dims:
+            for r in mlp_ratios:
+                out = int(e * r)
+                if out >= sample_out_dim and e >= sample_in_dim:
+                    current_pair = (e, r)
+                    break
+            if current_pair:
+                break
+
+        assert current_pair is not None, "현재 config에 맞는 (embed_dim, mlp_ratio) 페어를 찾을 수 없습니다."
+
+        # 앞선 페어들 정의
+        preceding_pairs = []
+        for e in embed_dims:
+            for r in mlp_ratios:
+                if (e < current_pair[0]) or (e == current_pair[0] and r < current_pair[1]):
+                    preceding_pairs.append((e, r))
+
+        # i_active, j_active 계산
         i_active = next(i for i, val in enumerate(dim0_splits) if val >= sample_out_dim)
         j_active = next(j for j, val in enumerate(dim1_splits) if val >= sample_in_dim)
 
+        # 🔹 Step 1: 전체 weight에 대해 i <= i_active and j <= j_active 면 True, 나머지 False
         for i in range(len(dim0_splits)):
             for j in range(len(dim1_splits)):
                 key = f'w{i+1}_{j+1}'
-                self.split_weights[key].requires_grad = (i == i_active and j == j_active)
+                self.split_weights[key].requires_grad = (i <= i_active and j <= j_active)
+
+        # 🔹 Step 2: preceding_pairs 에 해당하는 (e, r)에 해당하는 block 전체를 False로 덮어쓰기
+        for (e, r) in preceding_pairs:
+            out = int(e * r)
+            if name == 'fc1':
+                i_block = next(i for i, val in enumerate(dim0_splits) if val >= out)
+                j_block = next(j for j, val in enumerate(dim1_splits) if val >= e)
+            else:  # fc2
+                i_block = next(i for i, val in enumerate(dim0_splits) if val >= e)
+                j_block = next(j for j, val in enumerate(dim1_splits) if val >= out)
+
+            for i in range(i_block + 1):
+                for j in range(j_block + 1):
+                    key = f'w{i+1}_{j+1}'
+                    self.split_weights[key].requires_grad = False
 
     elif name == 'head':
         embed_dims = sorted(set(choices['embed_dim']))
@@ -303,9 +340,9 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
 
     sample_weight = full_weight[:sample_out_dim, :sample_in_dim]
 
-    # print(f"\n[🔍 {self.name} - Weight requires_grad status]")
-    # for key in self.split_weights:
-    #     print(f"  {key:10s} -> {self.split_weights[key].requires_grad}")
+    print(f"\n[🔍 {self.name} - Weight requires_grad status]")
+    for key in self.split_weights:
+        print(f"  {key:10s} -> {self.split_weights[key].requires_grad}")
 
     return sample_weight
 
