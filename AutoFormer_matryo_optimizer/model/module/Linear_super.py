@@ -126,6 +126,36 @@ class LinearSuper(nn.Linear):
 
                 # print(f"Split head into 1x{len(dim1_splits)} weight segments and 1 bias.")
 
+            elif name == 'qkv' or name == 'proj':
+                embed_dims = sorted(set(choices['embed_dim']))
+
+                if name == 'qkv':
+                    dim0_splits = [d * 3 for d in embed_dims] + [self.super_out_dim]
+                    dim1_splits = embed_dims + [self.super_in_dim]
+                else:  # 'proj'
+                    dim0_splits = embed_dims + [self.super_out_dim]
+                    dim1_splits = embed_dims + [self.super_in_dim]
+
+                self.split_weights = nn.ParameterDict()
+                for i in range(len(dim0_splits)):
+                    for j in range(len(dim1_splits)):
+                        start_dim0 = 0 if i == 0 else dim0_splits[i - 1]
+                        end_dim0 = dim0_splits[i]
+                        start_dim1 = 0 if j == 0 else dim1_splits[j - 1]
+                        end_dim1 = dim1_splits[j]
+                        shape = (end_dim0 - start_dim0, end_dim1 - start_dim1)
+                        param_name = f'w{i+1}_{j+1}'
+                        self.split_weights[param_name] = nn.Parameter(torch.empty(shape))
+                        self._init_split_param(self.split_weights[param_name])
+
+                self.split_bias = nn.ParameterDict()
+                for i in range(len(dim0_splits)):
+                    start = dim0_splits[i - 1] if i > 0 else 0
+                    end = dim0_splits[i]
+                    key = f'bias_{i+1}'
+                    self.split_bias[key] = nn.Parameter(torch.empty(end - start))
+                    self._init_split_param(self.split_bias[key], is_bias=True)
+
         # self.w1 = nn.Parameter(self.weight.data.clone(), requires_grad=True)
         
         # self.bias1 = nn.Parameter(self.bias.data.clone(), requires_grad=True)
@@ -154,23 +184,22 @@ class LinearSuper(nn.Linear):
         if bias:
             nn.init.constant_(self.bias, 0.)
 
-    def set_sample_config(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, sample_out_dim_prev=None, pretrained=False):
+    def set_sample_config(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, sample_out_dim_prev=None, pretrained=False, case_num=None):
         # print("_prev None check LinearSuper : ", sample_in_dim_prev, sample_out_dim_prev)
         self.sample_in_dim = sample_in_dim
         self.sample_out_dim = sample_out_dim
         self.sample_in_dim_prev = sample_in_dim_prev
         self.sample_out_dim_prev = sample_out_dim_prev
-
-        self.pretrained = pretrained
+        self.case_num = case_num
 
         self._sample_parameters()
 
     def _sample_parameters(self):
-        self.samples['weight'] = sample_weight(self, self.sample_in_dim, self.sample_out_dim, self.sample_in_dim_prev, self.sample_out_dim_prev, pretrained=self.pretrained)
+        self.samples['weight'] = sample_weight(self, self.sample_in_dim, self.sample_out_dim, self.sample_in_dim_prev, self.sample_out_dim_prev, case_num=self.case_num)
         self.samples['bias'] = self.bias
         self.sample_scale = self.super_out_dim/self.sample_out_dim
         if self.bias is not None:
-            self.samples['bias'] = sample_bias(self, self.sample_out_dim, self.sample_out_dim_prev, pretrained=self.pretrained)
+            self.samples['bias'] = sample_bias(self, self.sample_out_dim, self.sample_out_dim_prev, case_num=self.case_num)
         return self.samples
 
     def forward(self, x):
@@ -197,13 +226,12 @@ class LinearSuper(nn.Linear):
 
 # 수정된 sample_weight 함수로, 주어진 법칙대로 requires_grad를 설정함
 
-def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, sample_out_dim_prev=None, pretrained=False):
+def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, sample_out_dim_prev=None, pretrained=False, case_num=None):
     name = self.name
     choices = self.choices
 
     dim0_splits = [self.super_out_dim]
     dim1_splits = [self.super_in_dim]
-    # print("sample_weight : ", pretrained)
 
     if name in ['fc1', 'fc2']:
         embed_dims = sorted(set(choices['embed_dim']))
@@ -220,42 +248,52 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
             dim0_splits = dim_embed
             dim1_splits = dim_mlp
 
-        i_active = next(i for i, val in enumerate(dim0_splits) if val >= sample_out_dim)
-        j_active = next(j for j, val in enumerate(dim1_splits) if val >= sample_in_dim)
-
-        if pretrained:
-            # print("pretrained_weight")
-            ref = self.split_weights['w1_1']
-            mean, std = ref.mean().item(), ref.std().item()
-            for i in range(len(dim0_splits)):
-                for j in range(len(dim1_splits)):
-                    key = f'w{i+1}_{j+1}'
-                    if key != 'w1_1':
-                        nn.init.normal_(self.split_weights[key], mean=mean, std=std)
-
-        for i in range(len(dim0_splits)):
-            for j in range(len(dim1_splits)):
-                key = f'w{i+1}_{j+1}'
-                self.split_weights[key].requires_grad = (i == i_active and j == j_active)
-
     elif name == 'head':
         embed_dims = sorted(set(choices['embed_dim']))
         dim1_splits = embed_dims + [self.super_in_dim]
 
-        j_active = next(j for j, val in enumerate(dim1_splits) if val >= sample_in_dim)
+    if case_num is not None:
+        if name in ['fc1', 'fc2']:
+            # 🔹 Step 1: 전체 weight에 대해 i <= i_active and j <= j_active 면 True, 나머지 False
+            for i in range(len(dim0_splits)):
+                for j in range(len(dim1_splits)):
+                    key = f'w{i+1}_{j+1}'
+                    self.split_weights[key].requires_grad = False
 
-        if pretrained:
-            # print("pretrained_weight")
-            ref = self.split_weights['w1_1']
-            mean, std = ref.mean().item(), ref.std().item()
+            if case_num == 1:
+                true_label = [(1, 1)]
+            elif case_num == 2:
+                true_label = [(1, 2), (2, 1), (2, 2), (3, 1)]
+            elif case_num == 3:
+                true_label = [
+                    (1, 3), (2, 3), (3, 2), (3, 3),
+                    (4, 1), (4, 2), (4, 3),
+                    (5, 1), (5, 2), (5, 3),
+                    (6, 1), (6, 2), (6, 3)
+                ]
+
+            for i in range(len(dim0_splits)):
+                for j in range(len(dim1_splits)):
+                    key = f'w{i+1}_{j+1}'
+                    if name == 'fc1':
+                        self.split_weights[key].requires_grad = ((i + 1, j + 1) in true_label)
+                    elif name == 'fc2':
+                        self.split_weights[key].requires_grad = ((j + 1, i + 1) in true_label)
+
+        elif name == 'head':
+            embed_dims = sorted(set(choices['embed_dim']))
+            dim1_splits = embed_dims + [self.super_in_dim]
+
+            if case_num == 1:
+                true_label = [(1)]
+            elif case_num == 2:
+                true_label = [(2)]
+            elif case_num == 3:
+                true_label = [(3)]
+
             for j in range(len(dim1_splits)):
                 key = f'w1_{j+1}'
-                if key != 'w1_1':
-                    nn.init.normal_(self.split_weights[key], mean=mean, std=std)
-
-        for j in range(len(dim1_splits)):
-            key = f'w1_{j+1}'
-            self.split_weights[key].requires_grad = (j == j_active)
+                self.split_weights[key].requires_grad = ((j + 1) in true_label)
 
     # weight 조립
     row_blocks = []
@@ -276,35 +314,41 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
     return sample_weight
 
 
-def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False):
+def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False, case_num=None):
     name = self.name
     choices = self.choices
-
+    
     if name in ['fc1', 'fc2']:
         embed_dims = sorted(set(choices['embed_dim']))
         mlp_ratios = sorted(set(choices['mlp_ratio']))
+        true_label = []
 
         if name == 'fc1':
             dim0_sizes = sorted({int(e * r) for e in embed_dims for r in mlp_ratios})
             dim0_sizes += [self.super_out_dim]
+            if case_num is not None:
+                if case_num == 1:
+                    true_label = [(1)]
+                elif case_num == 2:
+                    true_label = [(2), (3)]
+                elif case_num == 3:
+                    true_label = [(4), (5), (6)]
         else:
             dim0_sizes = embed_dims + [self.super_out_dim]
-
-        i_active = next(i for i, val in enumerate(dim0_sizes) if val >= sample_out_dim)
-
-        if pretrained:
-            # print("pretrained_weight")
-            ref = self.split_bias['bias_1']
-            mean, std = ref.mean().item(), ref.std().item()
-            for i in range(len(dim0_sizes)):
-                key = f'bias_{i+1}'
-                if key != 'bias_1':
-                    nn.init.normal_(self.split_bias[key], mean=mean, std=std)
+            if case_num is not None:
+                if case_num == 1:
+                    true_label = [(1)]
+                elif case_num == 2:
+                    true_label = [(2)]
+                elif case_num == 3:
+                    true_label = [(3)]
 
         collected_bias = []
+        
         for i in range(len(dim0_sizes)):
             key = f'bias_{i+1}'
-            self.split_bias[key].requires_grad = (i == i_active)
+            if case_num is not None:
+                self.split_bias[key].requires_grad = ((i + 1) in true_label)
             collected_bias.append(self.split_bias[key])
 
         full_bias = torch.cat(collected_bias, dim=0)
