@@ -133,17 +133,33 @@ class EvolutionSearcher(object):
                 yield cand
 
     def get_random_cand(self):
-
+        choices = {
+            'num_heads': [3, 4],
+            'mlp_ratio': [3.5, 4.0],
+            'embed_dim': [192, 216, 240],
+            'depth': [14]
+        }
         cand_tuple = list()
         dimensions = ['mlp_ratio', 'num_heads']
-        depth = random.choice(self.choices['depth'])
+        depth = random.choice(choices['depth'])
         cand_tuple.append(depth)
         for dimension in dimensions:
             for i in range(depth):
-                cand_tuple.append(random.choice(self.choices[dimension]))
+                cand_tuple.append(random.choice(choices[dimension]))
 
-        cand_tuple.append(random.choice(self.choices['embed_dim']))
+        cand_tuple.append(random.choice(choices['embed_dim']))
         return tuple(cand_tuple)
+
+        # cand_tuple = list()
+        # dimensions = ['mlp_ratio', 'num_heads']
+        # depth = random.choice(self.choices['depth'])
+        # cand_tuple.append(depth)
+        # for dimension in dimensions:
+        #     for i in range(depth):
+        #         cand_tuple.append(random.choice(self.choices[dimension]))
+
+        # cand_tuple.append(random.choice(self.choices['embed_dim']))
+        # return tuple(cand_tuple)
 
     def get_random(self, num):
         print('random select ........')

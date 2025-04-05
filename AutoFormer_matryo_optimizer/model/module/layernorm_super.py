@@ -16,6 +16,8 @@ class LayerNormSuper(torch.nn.LayerNorm):
         self.samples = {}
         self.profiling = False
 
+        # torch.nn.LayerNorm 특성상 self.weight랑 self.bias밖에 못쓴다?
+
     def profile(self, mode=True):
         self.profiling = mode
 

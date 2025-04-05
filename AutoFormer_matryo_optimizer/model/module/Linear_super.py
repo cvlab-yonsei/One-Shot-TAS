@@ -252,11 +252,18 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
         for e in embed_dims:
             for r in mlp_ratios:
                 out = int(e * r)
-                if out >= sample_out_dim and e >= sample_in_dim:
-                    current_pair = (e, r)
-                    break
+                if name == 'fc1':
+                    if out >= sample_out_dim and e >= sample_in_dim:
+                        current_pair = (e, r)
+                        break
+                else:  # fc2
+                    if e >= sample_out_dim and out >= sample_in_dim:
+                        current_pair = (e, r)
+                        break
             if current_pair:
                 break
+
+        # print("current_pair: ", current_pair)
 
         assert current_pair is not None, "현재 config에 맞는 (embed_dim, mlp_ratio) 페어를 찾을 수 없습니다."
 
@@ -340,9 +347,9 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
 
     sample_weight = full_weight[:sample_out_dim, :sample_in_dim]
 
-    print(f"\n[🔍 {self.name} - Weight requires_grad status]")
-    for key in self.split_weights:
-        print(f"  {key:10s} -> {self.split_weights[key].requires_grad}")
+    # print(f"\n[🔍 {self.name} - Weight requires_grad status]")
+    # for key in self.split_weights:
+    #     print(f"  {key:10s} -> {self.split_weights[key].requires_grad}")
 
     return sample_weight
 
