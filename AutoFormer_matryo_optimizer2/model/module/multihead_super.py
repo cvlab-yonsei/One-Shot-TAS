@@ -43,15 +43,26 @@ class RelativePosition2D_super(nn.Module):
         self.sample_embeddings_table_h = None
         self.sample_embeddings_table_v = None
 
-    def set_sample_config(self, sample_head_dim, sample_head_dim_prev=None):
+    def set_sample_config(self, sample_head_dim, sample_head_dim_prev=None, case_num=None):
         self.sample_head_dim = sample_head_dim
 
         j_end = next(j for j, val in enumerate(self.dim1_splits) if val >= sample_head_dim)
 
-        for i in range(len(self.dim1_splits)):
-            freeze = i != j_end  # 하나만 True
-            self.split_embeddings_v[f'w{i+1}'].requires_grad = not freeze
-            self.split_embeddings_h[f'w{i+1}'].requires_grad = not freeze
+        # for i in range(len(self.dim1_splits)):
+        #     freeze = i != j_end  # 하나만 True
+        #     self.split_embeddings_v[f'w{i+1}'].requires_grad = not freeze
+        #     self.split_embeddings_h[f'w{i+1}'].requires_grad = not freeze
+        # if case_num is not None:
+        #     if case_num == 1:
+        #         true_label = [(1)]
+        #     elif case_num == 2:
+        #         true_label = [(1)]
+        #     elif case_num == 3:
+        #         true_label = [(1)]
+
+        #     for i in range(len(self.dim1_splits)):
+        #         self.split_embeddings_v[f'w{i+1}'].requires_grad = ((i + 1) in true_label)
+        #         self.split_embeddings_h[f'w{i+1}'].requires_grad = ((i + 1) in true_label)
 
         # concat + 슬라이싱
         full_v = torch.cat([self.split_embeddings_v[f'w{i+1}'] for i in range(len(self.dim1_splits))], dim=1)
@@ -68,6 +79,12 @@ class RelativePosition2D_super(nn.Module):
         # print(f"\n[🔍 RelativePosition2D_super - requires_grad status]")
         # for key in self.split_embeddings_v:
         #     print(f"  {key:10s} -> {self.split_embeddings_v[key].requires_grad}")
+
+        # # requires_grad 상태 출력
+        # print(f"\n[🔍 RelativePosition2D_super - requires_grad status]")
+        # for key in self.split_embeddings_h:
+        #     print(f"  {key:10s} -> {self.split_embeddings_h[key].requires_grad}")
+
 
 
     def calc_sampled_param_num(self):
@@ -144,7 +161,7 @@ class AttentionSuper(nn.Module):
         self.proj_drop = nn.Dropout(proj_drop)
 
     def set_sample_config(self, sample_q_embed_dim=None, sample_num_heads=None, sample_in_embed_dim=None,
-                          sample_q_embed_dim_prev=None, sample_num_heads_prev=None, sample_in_embed_dim_prev=None):
+                          sample_q_embed_dim_prev=None, sample_num_heads_prev=None, sample_in_embed_dim_prev=None, case_num=None):
 
         self.sample_in_embed_dim = sample_in_embed_dim
         self.sample_num_heads = sample_num_heads
@@ -185,8 +202,8 @@ class AttentionSuper(nn.Module):
 
         # self.qkv.set_sample_config(sample_in_dim=sample_in_embed_dim, sample_out_dim=3*self.sample_qk_embed_dim, sample_in_dim_prev=sample_in_embed_dim_prev, sample_out_dim_prev=(3*self.sample_qk_embed_dim_prev) if self.sample_qk_embed_dim_prev is not None else None)
         # self.proj.set_sample_config(sample_in_dim=self.sample_qk_embed_dim, sample_out_dim=sample_in_embed_dim, sample_in_dim_prev=self.sample_qk_embed_dim_prev, sample_out_dim_prev=self.sample_in_embed_dim_prev)
-        self.qkv.set_sample_config(sample_in_dim=sample_in_embed_dim, sample_out_dim=3*self.sample_qk_embed_dim) 
-        self.proj.set_sample_config(sample_in_dim=self.sample_qk_embed_dim, sample_out_dim=sample_in_embed_dim)
+        self.qkv.set_sample_config(sample_in_dim=sample_in_embed_dim, sample_out_dim=3*self.sample_qk_embed_dim, case_num=case_num) 
+        self.proj.set_sample_config(sample_in_dim=self.sample_qk_embed_dim, sample_out_dim=sample_in_embed_dim, case_num=case_num)
         
         if sample_num_heads_prev is None:
             sample_num_heads_prev = sample_num_heads
@@ -195,8 +212,8 @@ class AttentionSuper(nn.Module):
 
         
         if self.relative_position:
-            self.rel_pos_embed_k.set_sample_config(self.sample_qk_embed_dim // sample_num_heads, self.sample_qk_embed_dim_prev // sample_num_heads_prev)
-            self.rel_pos_embed_v.set_sample_config(self.sample_qk_embed_dim // sample_num_heads, self.sample_qk_embed_dim_prev // sample_num_heads_prev)
+            self.rel_pos_embed_k.set_sample_config(self.sample_qk_embed_dim // sample_num_heads, self.sample_qk_embed_dim_prev // sample_num_heads_prev, case_num=case_num)
+            self.rel_pos_embed_v.set_sample_config(self.sample_qk_embed_dim // sample_num_heads, self.sample_qk_embed_dim_prev // sample_num_heads_prev, case_num=case_num)
     def calc_sampled_param_num(self):
 
         return 0

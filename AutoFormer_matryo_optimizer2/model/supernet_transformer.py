@@ -84,7 +84,8 @@ class Vision_TransformerSuper(nn.Module):
 
         # self.pos_drop = nn.Dropout(p=drop_rate)
         if self.pre_norm:
-            self.norm = LayerNormSuper(super_embed_dim=embed_dim, choices=choices)
+            self.norm = LayerNormSuper(super_embed_dim=embed_dim)
+
 
         # classifier head
         self.head = LinearSuper(embed_dim, num_classes, choices=choices, name="head") if num_classes > 0 else nn.Identity()
@@ -153,7 +154,7 @@ class Vision_TransformerSuper(nn.Module):
         self.num_classes = num_classes
         self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
-    def set_sample_config(self, config: dict, config_prev: dict = None): # 이 안에 문제가 있다.
+    def set_sample_config(self, config: dict, config_prev: dict = None, pretrained=False, case_num=None): # 이 안에 문제가 있다.
         self.sample_embed_dim = config['embed_dim']
         self.sample_mlp_ratio = config['mlp_ratio']
         self.sample_layer_num = config['layer_num']
@@ -162,6 +163,7 @@ class Vision_TransformerSuper(nn.Module):
         self.sample_mlp_ratio_prev = None
         self.sample_layer_num_prev = None
         self.sample_num_heads_prev = None
+        self.case_num = case_num
 
         if config_prev is not None:
             self.sample_embed_dim_prev = config_prev['embed_dim']
@@ -171,7 +173,7 @@ class Vision_TransformerSuper(nn.Module):
 
 
         self.sample_dropout = calc_dropout(self.super_dropout, self.sample_embed_dim[0], self.super_embed_dim)
-        self.patch_embed_super.set_sample_config(self.sample_embed_dim[0], self.sample_embed_dim_prev[0] if self.sample_embed_dim_prev is not None else None)
+        self.patch_embed_super.set_sample_config(self.sample_embed_dim[0], self.sample_embed_dim_prev[0] if self.sample_embed_dim_prev is not None else None, case_num=case_num)
         self.sample_output_dim = [out_dim for out_dim in self.sample_embed_dim[1:]] + [self.sample_embed_dim[-1]]
 
         self.sample_dropout_prev = (
@@ -211,13 +213,15 @@ class Vision_TransformerSuper(nn.Module):
                     sample_dropout_prev=sample_dropout_prev,
                     sample_attn_dropout_prev=sample_attn_dropout_prev,
                     sample_out_dim_prev=self.sample_output_dim_prev[i] if self.sample_output_dim_prev is not None else None,
+                    pretrained=pretrained,
+                    case_num=case_num
                 )
             # exceeds sample layer number
             else:
                 blocks.set_sample_config(is_identity_layer=True)
         if self.pre_norm:
             self.norm.set_sample_config(self.sample_embed_dim[-1], self.sample_embed_dim_prev[-1] if self.sample_embed_dim_prev is not None else None)
-        self.head.set_sample_config(self.sample_embed_dim[-1], self.num_classes, self.sample_embed_dim_prev[-1] if self.sample_embed_dim_prev is not None else None, self.num_classes)
+        self.head.set_sample_config(self.sample_embed_dim[-1], self.num_classes, self.sample_embed_dim_prev[-1] if self.sample_embed_dim_prev is not None else None, self.num_classes, pretrained=pretrained, case_num=case_num)
 
     def get_sampled_params_numel(self, config):
         self.set_sample_config(config)
@@ -316,8 +320,8 @@ class TransformerEncoderLayer(nn.Module):
             max_relative_position=max_relative_position, choices=choices
         )
 
-        self.attn_layer_norm = LayerNormSuper(self.super_embed_dim, choices=choices)
-        self.ffn_layer_norm = LayerNormSuper(self.super_embed_dim, choices=choices)
+        self.attn_layer_norm = LayerNormSuper(self.super_embed_dim)
+        self.ffn_layer_norm = LayerNormSuper(self.super_embed_dim)
         # self.dropout = dropout
         self.activation_fn = gelu
         # self.normalize_before = args.encoder_normalize_before
@@ -331,7 +335,8 @@ class TransformerEncoderLayer(nn.Module):
                       sample_num_heads_prev=None,
                       sample_dropout_prev=None,
                       sample_attn_dropout_prev=None,
-                      sample_out_dim_prev=None): # 여긴 문제 없음 
+                      sample_out_dim_prev=None,
+                      pretrained=False, case_num=None): # 여긴 문제 없음 
 
         if is_identity_layer:
             self.is_identity_layer = True
@@ -363,6 +368,8 @@ class TransformerEncoderLayer(nn.Module):
         self.sample_attn_dropout_prev = sample_attn_dropout_prev
         self.sample_out_dim_prev = sample_out_dim_prev
 
+        self.case_num = case_num
+
         if sample_embed_dim_prev is None and sample_mlp_ratio_prev is None:
             self.sample_ffn_embed_dim_this_layer_prev = None
         else:
@@ -374,12 +381,12 @@ class TransformerEncoderLayer(nn.Module):
         self.attn_layer_norm.set_sample_config(sample_embed_dim=self.sample_embed_dim, sample_embed_dim_prev=self.sample_embed_dim_prev)
 
         self.attn.set_sample_config(sample_q_embed_dim=self.sample_num_heads_this_layer*64, sample_num_heads=self.sample_num_heads_this_layer, sample_in_embed_dim=self.sample_embed_dim,
-                                    sample_q_embed_dim_prev=(self.sample_num_heads_prev * 64) if self.sample_num_heads_prev is not None else None, sample_num_heads_prev=self.sample_num_heads_prev, sample_in_embed_dim_prev=self.sample_embed_dim_prev)
+                                    sample_q_embed_dim_prev=(self.sample_num_heads_prev * 64) if self.sample_num_heads_prev is not None else None, sample_num_heads_prev=self.sample_num_heads_prev, sample_in_embed_dim_prev=self.sample_embed_dim_prev, case_num=case_num)
 
         self.fc1.set_sample_config(sample_in_dim=self.sample_embed_dim, sample_out_dim=self.sample_ffn_embed_dim_this_layer,
-                                   sample_in_dim_prev=self.sample_embed_dim_prev, sample_out_dim_prev=self.sample_ffn_embed_dim_this_layer_prev)
+                                   sample_in_dim_prev=self.sample_embed_dim_prev, sample_out_dim_prev=self.sample_ffn_embed_dim_this_layer_prev, pretrained=pretrained, case_num=case_num)
         self.fc2.set_sample_config(sample_in_dim=self.sample_ffn_embed_dim_this_layer, sample_out_dim=self.sample_out_dim,
-                                   sample_in_dim_prev=self.sample_ffn_embed_dim_this_layer_prev, sample_out_dim_prev=self.sample_out_dim_prev)
+                                   sample_in_dim_prev=self.sample_ffn_embed_dim_this_layer_prev, sample_out_dim_prev=self.sample_out_dim_prev, pretrained=pretrained, case_num=case_num)
 
         self.ffn_layer_norm.set_sample_config(sample_embed_dim=self.sample_embed_dim, sample_embed_dim_prev=self.sample_embed_dim_prev)
 

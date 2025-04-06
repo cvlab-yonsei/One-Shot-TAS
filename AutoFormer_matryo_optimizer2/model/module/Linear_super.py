@@ -164,6 +164,7 @@ class LinearSuper(nn.Linear):
         self._reset_parameters(bias, uniform_, non_linear)
         self.profiling = False
 
+
     def _init_split_param(self, param, is_bias=False):
         if is_bias:
             nn.init.constant_(param, 0)
@@ -184,21 +185,22 @@ class LinearSuper(nn.Linear):
         if bias:
             nn.init.constant_(self.bias, 0.)
 
-    def set_sample_config(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, sample_out_dim_prev=None):
+    def set_sample_config(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, sample_out_dim_prev=None, pretrained=False, case_num=None):
         # print("_prev None check LinearSuper : ", sample_in_dim_prev, sample_out_dim_prev)
         self.sample_in_dim = sample_in_dim
         self.sample_out_dim = sample_out_dim
         self.sample_in_dim_prev = sample_in_dim_prev
         self.sample_out_dim_prev = sample_out_dim_prev
+        self.case_num = case_num
 
         self._sample_parameters()
 
     def _sample_parameters(self):
-        self.samples['weight'] = sample_weight(self, self.sample_in_dim, self.sample_out_dim, self.sample_in_dim_prev, self.sample_out_dim_prev)
+        self.samples['weight'] = sample_weight(self, self.sample_in_dim, self.sample_out_dim, self.sample_in_dim_prev, self.sample_out_dim_prev, case_num=self.case_num)
         self.samples['bias'] = self.bias
         self.sample_scale = self.super_out_dim/self.sample_out_dim
         if self.bias is not None:
-            self.samples['bias'] = sample_bias(self, self.sample_out_dim, self.sample_out_dim_prev)
+            self.samples['bias'] = sample_bias(self, self.sample_out_dim, self.sample_out_dim_prev, case_num=self.case_num)
         return self.samples
 
     def forward(self, x):
@@ -225,7 +227,7 @@ class LinearSuper(nn.Linear):
 
 # 수정된 sample_weight 함수로, 주어진 법칙대로 requires_grad를 설정함
 
-def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, sample_out_dim_prev=None):
+def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, sample_out_dim_prev=None, pretrained=False, case_num=None):
     name = self.name
     choices = self.choices
 
@@ -247,93 +249,129 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
             dim0_splits = dim_embed
             dim1_splits = dim_mlp
 
-        # 현재 config에 해당하는 (embed_dim, mlp_ratio) 페어 구하기
-        current_pair = None
-        for e in embed_dims:
-            for r in mlp_ratios:
-                out = int(e * r)
-                if name == 'fc1':
-                    if out >= sample_out_dim and e >= sample_in_dim:
-                        current_pair = (e, r)
-                        break
-                else:  # fc2
-                    if e >= sample_out_dim and out >= sample_in_dim:
-                        current_pair = (e, r)
-                        break
-            if current_pair:
-                break
-
-        # print("current_pair: ", current_pair)
-
-        assert current_pair is not None, "현재 config에 맞는 (embed_dim, mlp_ratio) 페어를 찾을 수 없습니다."
-
-        # 앞선 페어들 정의
-        preceding_pairs = []
-        for e in embed_dims:
-            for r in mlp_ratios:
-                if (e < current_pair[0]) or (e == current_pair[0] and r < current_pair[1]):
-                    preceding_pairs.append((e, r))
-
-        # i_active, j_active 계산
-        i_active = next(i for i, val in enumerate(dim0_splits) if val >= sample_out_dim)
-        j_active = next(j for j, val in enumerate(dim1_splits) if val >= sample_in_dim)
-
-        # 🔹 Step 1: 전체 weight에 대해 i <= i_active and j <= j_active 면 True, 나머지 False
-        for i in range(len(dim0_splits)):
-            for j in range(len(dim1_splits)):
-                key = f'w{i+1}_{j+1}'
-                self.split_weights[key].requires_grad = (i <= i_active and j <= j_active)
-
-        # 🔹 Step 2: preceding_pairs 에 해당하는 (e, r)에 해당하는 block 전체를 False로 덮어쓰기
-        for (e, r) in preceding_pairs:
-            out = int(e * r)
-            if name == 'fc1':
-                i_block = next(i for i, val in enumerate(dim0_splits) if val >= out)
-                j_block = next(j for j, val in enumerate(dim1_splits) if val >= e)
-            else:  # fc2
-                i_block = next(i for i, val in enumerate(dim0_splits) if val >= e)
-                j_block = next(j for j, val in enumerate(dim1_splits) if val >= out)
-
-            for i in range(i_block + 1):
-                for j in range(j_block + 1):
-                    key = f'w{i+1}_{j+1}'
-                    self.split_weights[key].requires_grad = False
-
     elif name == 'head':
         embed_dims = sorted(set(choices['embed_dim']))
         dim1_splits = embed_dims + [self.super_in_dim]
-
-        j_active = next(j for j, val in enumerate(dim1_splits) if val >= sample_in_dim)
-
-        for j in range(len(dim1_splits)):
-            key = f'w1_{j+1}'
-            self.split_weights[key].requires_grad = (j == j_active)
 
     elif name == 'qkv':
         embed_dims = sorted(set(choices['embed_dim']))
         dim0_splits = [3 * e for e in embed_dims] + [self.super_out_dim]
         dim1_splits = embed_dims + [self.super_in_dim]
 
-        i_active = next(i for i, val in enumerate(dim0_splits) if val >= sample_out_dim)
-        j_active = next(j for j, val in enumerate(dim1_splits) if val >= sample_in_dim)
+        # i_active = next(i for i, val in enumerate(dim0_splits) if val >= sample_out_dim)
+        # j_active = next(j for j, val in enumerate(dim1_splits) if val >= sample_in_dim)
 
-        for i in range(len(dim0_splits)):
-            for j in range(len(dim1_splits)):
-                key = f'w{i+1}_{j+1}'
-                self.split_weights[key].requires_grad = (i == i_active and j == j_active)
+        # for i in range(len(dim0_splits)):
+        #     for j in range(len(dim1_splits)):
+        #         key = f'w{i+1}_{j+1}'
+        #         self.split_weights[key].requires_grad = (i == i_active and j == j_active)
 
     elif name == 'proj':
         embed_dims = sorted(set(choices['embed_dim']))
         dim0_splits = embed_dims + [self.super_out_dim]
         dim1_splits = embed_dims + [self.super_in_dim]
 
-        i_active = next(i for i, val in enumerate(dim0_splits) if val >= sample_out_dim)
-        j_active = next(j for j, val in enumerate(dim1_splits) if val >= sample_in_dim)
 
-        for i in range(len(dim0_splits)):
-            for j in range(len(dim1_splits)):
-                key = f'w{i+1}_{j+1}'
-                self.split_weights[key].requires_grad = (i == i_active and j == j_active)
+    # if case_num is not None:
+    #     if name in ['fc1', 'fc2']:
+    #         # 🔹 Step 1: 전체 weight에 대해 i <= i_active and j <= j_active 면 True, 나머지 False
+    #         for i in range(len(dim0_splits)):
+    #             for j in range(len(dim1_splits)):
+    #                 key = f'w{i+1}_{j+1}'
+    #                 self.split_weights[key].requires_grad = False
+
+    #         if case_num == 1:
+    #             true_label = [(1, 1), (2, 1), (3, 1)]
+    #         elif case_num == 2:
+    #             true_label = [(1, 2), (2, 2), (3, 2), (4, 1), (4, 2), (5, 1), (5, 2)]
+    #         elif case_num == 3:
+    #             true_label = [
+    #                 (1, 3), (2, 3), (3, 3),
+    #                 (4, 3), (5, 3),
+    #                 (6, 1), (6, 2), (6, 3)
+    #             ]
+
+    #         for i in range(len(dim0_splits)):
+    #             for j in range(len(dim1_splits)):
+    #                 key = f'w{i+1}_{j+1}'
+    #                 if name == 'fc1':
+    #                     self.split_weights[key].requires_grad = ((i + 1, j + 1) in true_label)
+    #                 elif name == 'fc2':
+    #                     self.split_weights[key].requires_grad = ((j + 1, i + 1) in true_label)
+
+    #     elif name == 'head':
+    #         embed_dims = sorted(set(choices['embed_dim']))
+    #         dim1_splits = embed_dims + [self.super_in_dim]
+
+    #         if case_num == 1:
+    #             true_label = [(1)]
+    #         elif case_num == 2:
+    #             true_label = [(2)]
+    #         elif case_num == 3:
+    #             true_label = [(3)]
+
+    #         for j in range(len(dim1_splits)):
+    #             key = f'w1_{j+1}'
+    #             self.split_weights[key].requires_grad = ((j + 1) in true_label)
+
+    #     elif name == 'qkv':
+    #         embed_dims = sorted(set(choices['embed_dim']))
+    #         dim0_splits = [3 * e for e in embed_dims] + [self.super_out_dim]
+    #         dim1_splits = embed_dims + [self.super_in_dim]
+
+    #         if case_num == 1:
+    #             true_label = [(1, 1)]
+    #         elif case_num == 2:
+    #             true_label = [(1, 2), (2, 1), (2, 2)]
+    #         elif case_num == 3:
+    #             true_label = [
+    #                 (1, 3), (2, 3), (3, 3),
+    #                 (3, 1), (3, 2)
+    #             ]
+
+    #         for i in range(len(dim0_splits)):
+    #             for j in range(len(dim1_splits)):
+    #                 key = f'w{i+1}_{j+1}'
+    #                 self.split_weights[key].requires_grad = ((i + 1, j + 1) in true_label)
+
+
+    #         # i_active = next(i for i, val in enumerate(dim0_splits) if val >= sample_out_dim)
+    #         # j_active = next(j for j, val in enumerate(dim1_splits) if val >= sample_in_dim)
+
+    #         # for i in range(len(dim0_splits)):
+    #         #     for j in range(len(dim1_splits)):
+    #         #         key = f'w{i+1}_{j+1}'
+    #         #         self.split_weights[key].requires_grad = (i == i_active and j == j_active)
+
+    #     elif name == 'proj':
+    #         embed_dims = sorted(set(choices['embed_dim']))
+    #         dim0_splits = embed_dims + [self.super_out_dim]
+    #         dim1_splits = embed_dims + [self.super_in_dim]
+
+    #         if case_num == 1:
+    #             true_label = [(1, 1)]
+    #         elif case_num == 2:
+    #             true_label = [(1, 2), (2, 1), (2, 2)]
+    #         elif case_num == 3:
+    #             true_label = [
+    #                 (1, 3), (2, 3), (3, 3),
+    #                 (3, 1), (3, 2)
+    #             ]
+
+    #         for i in range(len(dim0_splits)):
+    #             for j in range(len(dim1_splits)):
+    #                 key = f'w{i+1}_{j+1}'
+    #                 self.split_weights[key].requires_grad = ((i + 1, j + 1) in true_label)
+
+
+    #         # i_active = next(i for i, val in enumerate(dim0_splits) if val >= sample_out_dim)
+    #         # j_active = next(j for j, val in enumerate(dim1_splits) if val >= sample_in_dim)
+
+    #         # for i in range(len(dim0_splits)):
+    #         #     for j in range(len(dim1_splits)):
+    #         #         key = f'w{i+1}_{j+1}'
+    #         #         self.split_weights[key].requires_grad = (i == i_active and j == j_active)
+
 
     # weight 조립
     row_blocks = []
@@ -354,26 +392,41 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
     return sample_weight
 
 
-def sample_bias(self, sample_out_dim, sample_out_dim_prev=None):
+def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False, case_num=None):
     name = self.name
     choices = self.choices
-
+    
     if name in ['fc1', 'fc2']:
         embed_dims = sorted(set(choices['embed_dim']))
         mlp_ratios = sorted(set(choices['mlp_ratio']))
+        true_label = []
 
         if name == 'fc1':
             dim0_sizes = sorted({int(e * r) for e in embed_dims for r in mlp_ratios})
             dim0_sizes += [self.super_out_dim]
+            if case_num is not None:
+                if case_num == 1:
+                    true_label = [(1)]
+                elif case_num == 2:
+                    true_label = [(2), (3)]
+                elif case_num == 3:
+                    true_label = [(4), (5), (6)]
         else:
             dim0_sizes = embed_dims + [self.super_out_dim]
-
-        i_active = next(i for i, val in enumerate(dim0_sizes) if val >= sample_out_dim)
+            if case_num is not None:
+                if case_num == 1:
+                    true_label = [(1)]
+                elif case_num == 2:
+                    true_label = [(2)]
+                elif case_num == 3:
+                    true_label = [(3)]
 
         collected_bias = []
+        
         for i in range(len(dim0_sizes)):
             key = f'bias_{i+1}'
-            self.split_bias[key].requires_grad = (i == i_active)
+            # if case_num is not None:
+            #     self.split_bias[key].requires_grad = ((i + 1) in true_label)
             collected_bias.append(self.split_bias[key])
 
         full_bias = torch.cat(collected_bias, dim=0)
@@ -386,7 +439,7 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None):
         return sample_bias
 
     elif name == 'head':
-        self.split_bias['bias'].requires_grad = True
+        # self.split_bias['bias'].requires_grad = True
         sample_bias = self.split_bias['bias'][:sample_out_dim]
 
         # print(f"\n[🔍 {self.name} - Bias requires_grad status]")
@@ -404,8 +457,12 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None):
         collected_bias = []
         for i in range(len(dim0_sizes)):
             key = f'bias_{i+1}'
-            self.split_bias[key].requires_grad = (i == i_active)
+            # self.split_bias[key].requires_grad = (i == i_active)
             collected_bias.append(self.split_bias[key])
+
+        # print(f"\n[🔍 {self.name} - Bias requires_grad status]")
+        # for key in self.split_bias:
+        #     print(f"  {key:10s} -> {self.split_bias[key].requires_grad}")
 
         full_bias = torch.cat(collected_bias, dim=0)
         return full_bias[:sample_out_dim]
@@ -419,8 +476,12 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None):
         collected_bias = []
         for i in range(len(dim0_sizes)):
             key = f'bias_{i+1}'
-            self.split_bias[key].requires_grad = (i == i_active)
+            # self.split_bias[key].requires_grad = (i == i_active)
             collected_bias.append(self.split_bias[key])
+        
+        # print(f"\n[🔍 {self.name} - Bias requires_grad status]")
+        # for key in self.split_bias:
+        #     print(f"  {key:10s} -> {self.split_bias[key].requires_grad}")
 
         full_bias = torch.cat(collected_bias, dim=0)
         return full_bias[:sample_out_dim]

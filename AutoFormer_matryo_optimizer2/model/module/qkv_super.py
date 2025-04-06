@@ -72,20 +72,21 @@ class qkv_super(nn.Linear):
         if bias:
             nn.init.constant_(self.bias, 0.)
 
-    def set_sample_config(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, sample_out_dim_prev=None):
+    def set_sample_config(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, sample_out_dim_prev=None, case_num=None):
         self.sample_in_dim = sample_in_dim
         self.sample_out_dim = sample_out_dim
         self.sample_in_dim_prev = sample_in_dim_prev
         self.sample_out_dim_prev = sample_out_dim_prev
+        self.case_num=case_num
 
         self._sample_parameters()
 
     def _sample_parameters(self):
         sample_w = sample_weight(self.split_weights, self.sample_in_dim, self.sample_out_dim,
                                  self.sample_in_dim_prev, self.sample_out_dim_prev,
-                                 self.dim0_splits, self.dim1_splits)
+                                 self.dim0_splits, self.dim1_splits, self.case_num)
 
-        sample_b = sample_bias(self.split_bias, self.sample_out_dim, self.sample_out_dim_prev, self.dim0_splits)
+        sample_b = sample_bias(self.split_bias, self.sample_out_dim, self.sample_out_dim_prev, self.dim0_splits, self.case_num)
         self.samples['weight'] = sample_w
         self.samples['bias'] = sample_b
         self.sample_scale = self.super_out_dim/self.sample_out_dim
@@ -111,14 +112,30 @@ class qkv_super(nn.Linear):
         total_flops += sequence_length *  np.prod(self.samples['weight'].size())
         return total_flops
 
-def sample_weight(split_weights, sample_in_dim, sample_out_dim, sample_in_dim_prev, sample_out_dim_prev, dim0_splits, dim1_splits):
+def sample_weight(split_weights, sample_in_dim, sample_out_dim, sample_in_dim_prev, sample_out_dim_prev, dim0_splits, dim1_splits, case_num=None):
     i_end = next(i for i, val in enumerate(dim0_splits) if val >= sample_out_dim)
     j_end = next(j for j, val in enumerate(dim1_splits) if val >= sample_in_dim)
 
-    for key in split_weights:
-        split_weights[key].requires_grad = False
-    key = f'w{i_end+1}_{j_end+1}'
-    split_weights[key].requires_grad = True
+    # for key in split_weights:
+    #     split_weights[key].requires_grad = False
+    # key = f'w{i_end+1}_{j_end+1}'
+    # split_weights[key].requires_grad = True
+    
+    # if case_num is not None:
+    #     if case_num == 1:
+    #         true_label = [(1, 1)]
+    #     elif case_num == 2:
+    #         true_label = [(1, 2), (2, 1), (2, 2)]
+    #     elif case_num == 3:
+    #         true_label = [
+    #             (1, 3), (2, 3), (3, 3),
+    #             (3, 1), (3, 2)
+    #         ]
+
+    #     for i in range(len(dim0_splits)):
+    #         for j in range(len(dim1_splits)):
+    #             key = f'w{i+1}_{j+1}'
+    #             split_weights[key].requires_grad = ((i + 1, j + 1) in true_label)
 
     row_blocks = []
     for i in range(len(dim0_splits)):
@@ -138,13 +155,24 @@ def sample_weight(split_weights, sample_in_dim, sample_out_dim, sample_in_dim_pr
     return sample_weight
 
 
-def sample_bias(split_bias, sample_out_dim, sample_out_dim_prev, dim0_splits):
+def sample_bias(split_bias, sample_out_dim, sample_out_dim_prev, dim0_splits, case_num=None):
     i_end = next(i for i, val in enumerate(dim0_splits) if val >= sample_out_dim)
 
-    for key in split_bias:
-        split_bias[key].requires_grad = False
-    key = f'bias_{i_end+1}'
-    split_bias[key].requires_grad = True
+    # for key in split_bias:
+    #     split_bias[key].requires_grad = False
+    # key = f'bias_{i_end+1}'
+    # split_bias[key].requires_grad = True
+    # if case_num is not None:
+    #     if case_num == 1:
+    #         true_label = [(1)]
+    #     elif case_num == 2:
+    #         true_label = [(2)]
+    #     elif case_num == 3:
+    #         true_label = [(3)]
+
+    #     for i in range(len(dim0_splits)):
+    #         split_bias[f'bias_{i+1}'].requires_grad = ((i + 1) in true_label)
+
 
     full_bias = torch.cat([split_bias[f'bias_{i+1}'] for i in range(len(dim0_splits))], dim=0)
     

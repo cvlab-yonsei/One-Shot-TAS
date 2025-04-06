@@ -40,97 +40,31 @@ import time
     
 #     return prev_config
 
-# def manual_lr_schedule(epoch, args):
-#     # 워밍업 설정
-#     warmup_epochs = args.warmup_epochs       # ex. 20
-#     warmup_start_lr = args.warmup_lr         # ex. 1e-6
-#     base_lr = args.lr                        # ex. 5e-4
-#     min_lr = args.min_lr                     # ex. 1e-5
-#     total_epochs = args.epochs               # ex. 500
-
-#     # if epoch < warmup_epochs:
-#     #     # 선형 워밍업
-#     #     current_lr = warmup_start_lr + (base_lr - warmup_start_lr) * (epoch / warmup_epochs)
-#     # else:
-#     #     # 선형 디케이
-#     #     decay_progress = (epoch - warmup_epochs) / (total_epochs - warmup_epochs)
-#     #     current_lr = base_lr - (base_lr - min_lr) * decay_progress
-
-#     # cosine decay + warmup
-#     if epoch < warmup_epochs:
-#         current_lr = warmup_start_lr + (base_lr - warmup_start_lr) * (epoch / warmup_epochs)
-#     else:
-#         decay_progress = (epoch - warmup_epochs) / (total_epochs - warmup_epochs)
-#         cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_progress))
-#         current_lr = min_lr + (base_lr - min_lr) * cosine_decay
-    
-#     return current_lr
-
-
-import math
-
-import math
-
-# def manual_lr_schedule(epoch, args):
-#     # config index에 따라 각 구간 할당 (399~499)
-#     config_epochs = [10, 10] + [9] * 9  # 총 11개: [10, 10, 9, ..., 9]
-#     config_start = 399
-
-#     # 어떤 config에 해당하는지 찾기
-#     offset = epoch - config_start
-#     cum_epochs = 0
-#     config_idx = -1
-#     for i, e in enumerate(config_epochs):
-#         if offset < cum_epochs + e:
-#             config_idx = i
-#             break
-#         cum_epochs += e
-
-#     if config_idx == -1:
-#         return args.min_lr  # 예외 처리: 범위 벗어난 경우
-
-#     # 해당 config 내에서 몇 번째 epoch인지
-#     local_epoch = offset - cum_epochs
-
-#     # warm-up 설정 (3 epochs)
-#     warmup_lrs = [1e-4, 3e-4, 7e-4]
-#     if local_epoch < 3:
-#         current_lr = warmup_lrs[local_epoch]
-#     else:
-#         # cosine decay: 시작 lr 0.001 → 끝 lr 0.0005
-#         decay_epoch = local_epoch - 3
-#         decay_total = config_epochs[config_idx] - 3
-#         base_lr = 1e-3
-#         min_lr = 5e-4
-
-#         decay_progress = decay_epoch / max(decay_total, 1)  # 0~1 사이
-#         cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_progress))
-#         current_lr = min_lr + (base_lr - min_lr) * cosine_decay
-
-#     return current_lr
-
 def manual_lr_schedule(epoch, args):
-    base_lr = 1e-4
-    min_lr = 1e-5
-    start_epoch = 399
-    end_epoch = 499
-    total_decay_epochs = end_epoch - start_epoch
+    # 워밍업 설정
+    warmup_epochs = args.warmup_epochs       # ex. 20
+    warmup_start_lr = args.warmup_lr         # ex. 1e-6
+    base_lr = args.lr                        # ex. 5e-4
+    min_lr = args.min_lr                     # ex. 1e-5
+    total_epochs = args.epochs               # ex. 500
 
-    # 시작 전에는 base_lr 유지
-    if epoch < start_epoch:
-        return base_lr
-    # 종료 후에도 min_lr 고정
-    elif epoch > end_epoch:
-        return min_lr
+    # if epoch < warmup_epochs:
+    #     # 선형 워밍업
+    #     current_lr = warmup_start_lr + (base_lr - warmup_start_lr) * (epoch / warmup_epochs)
+    # else:
+    #     # 선형 디케이
+    #     decay_progress = (epoch - warmup_epochs) / (total_epochs - warmup_epochs)
+    #     current_lr = base_lr - (base_lr - min_lr) * decay_progress
 
-    decay_progress = (epoch - start_epoch) / total_decay_epochs
-    cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_progress))
-    current_lr = min_lr + (base_lr - min_lr) * cosine_decay
-
+    # cosine decay + warmup
+    if epoch < warmup_epochs:
+        current_lr = warmup_start_lr + (base_lr - warmup_start_lr) * (epoch / warmup_epochs)
+    else:
+        decay_progress = (epoch - warmup_epochs) / (total_epochs - warmup_epochs)
+        cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_progress))
+        current_lr = min_lr + (base_lr - min_lr) * cosine_decay
+    
     return current_lr
-
-
-
 
 
 def get_previous_config(config, choices):
@@ -365,134 +299,37 @@ def sample_configs(choices):
     config['layer_num'] = depth
     return config
 
-
-def sample_configs_curriculum(choices, epoch=None):
-    import random
-
+def sample_configs_curriculum(choices, epoch=None, curriculum_epoch=None):
     config = {}
+    dimensions = ['mlp_ratio', 'num_heads']
     # depth = random.choice(choices['depth'])
-    depth = 14
+    depth = 12
 
-    config_list = [
-        (192, 3, 4.0),
-        (192, 4, 3.5),
-        (192, 4, 4.0),
-        (216, 3, 3.5),
-        (216, 3, 4.0),
-        (216, 4, 3.5),
-        (216, 4, 4.0),
-        (240, 3, 3.5),
-        (240, 3, 4.0),
-        (240, 4, 3.5),
-        (240, 4, 4.0),
-    ]
-
-    # ---------------------------
-    # 1. Pre-curriculum 단계
-    # ---------------------------
-    if epoch is None or epoch < 399:
+    if epoch is None:
         config['embed_dim'] = [192] * depth
-        config['num_heads'] = [3] * depth
         config['mlp_ratio'] = [3.5] * depth
+        config['num_heads'] = [3] * depth
 
-    # ---------------------------
-    # 2. 299~500: curriculum 적용
-    # ---------------------------
-    elif 399 <= epoch <= 500:
-        curriculum_epochs = 101  # 399 ~ 499 inclusive
-        num_configs = len(config_list)
-        base_epochs = curriculum_epochs // num_configs  # 9
-        extras = curriculum_epochs % num_configs        # 2
+    elif epoch < curriculum_epoch[1]:
+        config['embed_dim'] = [192] * depth
+        config['mlp_ratio'] = [3.5] * depth
+        config['num_heads'] = [3] * depth
+        # config['embed_dim'] = [192] * depth
+        # config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 1])[0] for _ in range(depth)]
+        # config['num_heads'] = [random.choices([3, 4], weights=[1, 1])[0] for _ in range(depth)]
 
-        # config별 시작-끝 구간 계산
-        schedule = []
-        start = 0
-        for i in range(num_configs):
-            duration = base_epochs + 1 if i < extras else base_epochs
-            end = start + duration
-            schedule.append((start, end))  # (inclusive, exclusive)
-            start = end
+    elif epoch >= curriculum_epoch[1] and epoch < curriculum_epoch[2]:
+        config['embed_dim'] = [216] * depth
+        config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 1])[0] for _ in range(depth)]
+        config['num_heads'] = [random.choices([3, 4], weights=[1, 1])[0] for _ in range(depth)]
 
-        # 현재 config index 찾기
-        offset = epoch - 399
-        for config_idx, (s, e) in enumerate(schedule):
-            if s <= offset < e:
-                embed_dim, preferred_head, preferred_mlp = config_list[config_idx]
-                break
-
-        # 확률 기반 샘플링
-        head_choices = [preferred_head, 4 if preferred_head == 3 else 3]
-        head_weights = [1, 0] # 2, 1
-        mlp_choices = [preferred_mlp, 3.5 if preferred_mlp == 4.0 else 4.0]
-        mlp_weights = [1, 0] # 2, 1
-
-        config['embed_dim'] = [embed_dim] * depth
-        config['num_heads'] = [
-            random.choices(head_choices, weights=head_weights)[0] for _ in range(depth)
-        ]
-        config['mlp_ratio'] = [
-            random.choices(mlp_choices, weights=mlp_weights)[0] for _ in range(depth)
-        ]
-
-    # ---------------------------
-    # 3. 이후 epoch: 마지막 config 반복
-    # ---------------------------
     else:
-        embed_dim, preferred_head, preferred_mlp = config_list[-1]
-        head_choices = [preferred_head, 4 if preferred_head == 3 else 3]
-        head_weights = [1, 0] # 2, 1
-        mlp_choices = [preferred_mlp, 3.5 if preferred_mlp == 4.0 else 4.0]
-        mlp_weights = [1, 0] # 2, 1
-
-        config['embed_dim'] = [embed_dim] * depth
-        config['num_heads'] = [
-            random.choices(head_choices, weights=head_weights)[0] for _ in range(depth)
-        ]
-        config['mlp_ratio'] = [
-            random.choices(mlp_choices, weights=mlp_weights)[0] for _ in range(depth)
-        ]
+        config['embed_dim'] = [240] * depth
+        config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 1])[0] for _ in range(depth)]
+        config['num_heads'] = [random.choices([3, 4], weights=[1, 1])[0] for _ in range(depth)]
 
     config['layer_num'] = depth
     return config
-
-# def sample_configs_curriculum(choices, epoch=None):
-#     config = {}
-#     dimensions = ['mlp_ratio', 'num_heads']
-#     # depth = random.choice(choices['depth'])
-#     depth = 14
-#     if epoch is None:
-#             config['embed_dim'] = [192] * depth
-#             config['mlp_ratio'] = [3.5] * depth
-#             config['num_heads'] = [3] * depth
-#     else:
-#         if epoch <= 1000:
-#             config['embed_dim'] = [192] * depth
-#             config['mlp_ratio'] = [3.5] * depth
-#             config['num_heads'] = [3] * depth
-
-#         elif 301 <= epoch <= 400:
-#             config['embed_dim'] = [random.choices([192, 216, 240], weights=[1, 4, 1])[0]] * depth
-#             config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 3])[0] for _ in range(depth)]
-#             config['num_heads'] = [random.choices([3, 4], weights=[1, 3])[0] for _ in range(depth)]
-
-#         elif 401 <= epoch <= 500:
-#             config['embed_dim'] = [random.choices([192, 216, 240], weights=[1, 1, 4])[0]] * depth
-#             config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 5])[0] for _ in range(depth)]
-#             config['num_heads'] = [random.choices([3, 4], weights=[1, 5])[0] for _ in range(depth)]
-
-
-#         # elif 301 <= epoch <= 400:
-#         #     config['embed_dim'] = [random.choices([192, 216, 240], weights=[1, 4, 1])[0]] * depth
-#         #     config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 3])[0] for _ in range(depth)]
-#         #     config['num_heads'] = [random.choices([3, 4], weights=[1, 3])[0] for _ in range(depth)]
-
-#         # elif 401 <= epoch <= 500:
-#         #     config['embed_dim'] = [random.choices([192, 216, 240], weights=[1, 1, 4])[0]] * depth
-#         #     config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 5])[0] for _ in range(depth)]
-#         #     config['num_heads'] = [random.choices([3, 4], weights=[1, 5])[0] for _ in range(depth)]
-
-#     config['layer_num'] = depth
-#     return config
 
 def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
@@ -523,11 +360,22 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     lr_scheduler, _ = create_scheduler(args, temp_optimizer)   
 
     global_iter = epoch * len(data_loader) 
-    config = sample_configs_curriculum(choices=choices, epoch=epoch)
-    prev_config = get_previous_config(config=config, choices=choices) # None 처리 잘되는거 확인
 
-    init_done = False
+    # curriculum_epoch = [0, 399, 470]
+    curriculum_epoch = [0, 500, 501]
+    case_num = None
 
+    if epoch in curriculum_epoch:
+        case_num = curriculum_epoch.index(epoch) + 1
+        # # case_num = None
+        # # 매 iteration마다 학습 가능한 파라미터만 포함하도록 새 optimizer를 생성
+        # optimizer = create_optimizer(
+        #     args, 
+        #     [p for p in model.parameters() if p.requires_grad]
+        # )
+        # lr_scheduler.optimizer = optimizer
+
+    print("case_num : ", case_num)
 
     for samples, targets in metric_logger.log_every(data_loader, print_freq, header):
         samples = samples.to(device, non_blocking=True)
@@ -538,27 +386,24 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         # sample random config
         if mode == 'super':
             # config = sample_configs(choices=choices)
-            # config = sample_configs_curriculum(choices=choices, epoch=epoch)
-            # prev_config = get_previous_config(config=config, choices=choices) # None 처리 잘되는거 확인
+            config = sample_configs_curriculum(choices=choices, epoch=epoch, curriculum_epoch=curriculum_epoch)    
+            prev_config = get_previous_config(config=config, choices=choices) # None 처리 잘되는거 확인
             model_module = unwrap_model(model)
-            # pretrained = prev_step_config is None and init_done == False
-            pretrained = False
-            # print("supernet_engine : ", pretrained)
-            model_module.set_sample_config(config=config, config_prev=prev_config)
-            init_done = True
+            model_module.set_sample_config(config=config, config_prev=prev_config, case_num=case_num)
             # model_module.set_sample_config(config=config)
 
-            if config != prev_step_config:
-                print("config : ", config)
-                print("prev_step_config : ", prev_step_config)
-                prev_step_config = config
-                print("config change!")
-                # 매 iteration마다 학습 가능한 파라미터만 포함하도록 새 optimizer를 생성
-                optimizer = create_optimizer(
-                    args, 
-                    [p for p in model.parameters() if p.requires_grad]
-                )
-                lr_scheduler.optimizer = optimizer
+            # if config != prev_step_config:
+            #     print("config : ", config)
+            #     print("prev_step_config : ", prev_step_config)
+            #     prev_step_config = config
+            #     print("config change!")
+
+                # # 매 iteration마다 학습 가능한 파라미터만 포함하도록 새 optimizer를 생성
+                # optimizer = create_optimizer(
+                #     args, 
+                #     [p for p in model.parameters() if p.requires_grad]
+                # )
+                # lr_scheduler.optimizer = optimizer
                 
             # if epoch < 20:
             #     # 워밍업: 0~20 epoch에서 1e-6에서 1e-3로 증가
@@ -571,9 +416,9 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             # for group in optimizer.param_groups:
             #     group['lr'] = current_lr
 
-            current_lr = manual_lr_schedule(epoch, args)
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = current_lr
+            # current_lr = manual_lr_schedule(epoch, args)
+            # for param_group in optimizer.param_groups:
+            #     param_group['lr'] = current_lr
 
         elif mode == 'retrain':
             config = retrain_config
@@ -638,14 +483,14 @@ def evaluate(data_loader, model, device, amp=True, choices=None, mode='super', r
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Test:'
 
+    # curriculum_epoch = [0, 399, 470]
+    curriculum_epoch = [0, 500, 501]
+
     # switch to evaluation mode
     model.eval()
     if mode == 'super':
-        # config = sample_configs(choices=choices)
-        # config = sample_configs_curriculum(choices=choices, epoch=epoch)
-        config = prev_step_config
-        if prev_step_config is None:
-            config = sample_configs(choices=choices)
+        config = sample_configs(choices=choices)
+        # config = sample_configs_curriculum(choices=choices, epoch=epoch, curriculum_epoch=curriculum_epoch) 
         model_module = unwrap_model(model)
         model_module.set_sample_config(config=config)
     else:
