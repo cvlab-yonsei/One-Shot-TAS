@@ -1,13 +1,10 @@
 import torch
-import torch.nn as nn
+from torch import nn
 from torch.nn import Parameter
 import torch.nn.functional as F
 from .Linear_super import LinearSuper
-from .Linear_super_original import LinearSuperOriginal
 from .qkv_super import qkv_super
 from ..utils import trunc_normal_
-from timm.models.layers import trunc_normal_
-
 def softmax(x, dim, onnx_trace=False):
     if onnx_trace:
         return F.softmax(x.float(), dim=dim)
@@ -16,28 +13,17 @@ def softmax(x, dim, onnx_trace=False):
 
 class RelativePosition2D_super(nn.Module):
 
-    def __init__(self, num_units, max_relative_position, choices=None):
+    def __init__(self, num_units, max_relative_position):
         super().__init__()
 
         self.num_units = num_units
         self.max_relative_position = max_relative_position
-        self.choices = choices
+        # The first element in embeddings_table_v is the vertical embedding for the class
+        self.embeddings_table_v = nn.Parameter(torch.randn(max_relative_position * 2 + 2, num_units))
+        self.embeddings_table_h = nn.Parameter(torch.randn(max_relative_position * 2 + 2, num_units))
 
-        # Split dim
-        embed_dims = sorted(set([(h * 64) // h for h in self.choices['num_heads']] + [self.num_units]))
-        self.dim1_splits = embed_dims  # 예: [64, 512]
-
-        # split 파라미터 선언
-        self.split_embeddings_v = nn.ParameterDict()
-        self.split_embeddings_h = nn.ParameterDict()
-        for i in range(len(self.dim1_splits)):
-            start = 0 if i == 0 else self.dim1_splits[i - 1]
-            end = self.dim1_splits[i]
-            shape = (self.max_relative_position * 2 + 2, end - start)
-            self.split_embeddings_v[f'w{i+1}'] = nn.Parameter(torch.empty(shape))
-            self.split_embeddings_h[f'w{i+1}'] = nn.Parameter(torch.empty(shape))
-            nn.init.trunc_normal_(self.split_embeddings_v[f'w{i+1}'], std=0.02)
-            nn.init.trunc_normal_(self.split_embeddings_h[f'w{i+1}'], std=0.02)
+        trunc_normal_(self.embeddings_table_v, std=.02)
+        trunc_normal_(self.embeddings_table_h, std=.02)
 
         self.sample_head_dim = None
         self.sample_embeddings_table_h = None
@@ -45,47 +31,8 @@ class RelativePosition2D_super(nn.Module):
 
     def set_sample_config(self, sample_head_dim, sample_head_dim_prev=None, case_num=None):
         self.sample_head_dim = sample_head_dim
-
-        j_end = next(j for j, val in enumerate(self.dim1_splits) if val >= sample_head_dim)
-
-        # for i in range(len(self.dim1_splits)):
-        #     freeze = i != j_end  # 하나만 True
-        #     self.split_embeddings_v[f'w{i+1}'].requires_grad = not freeze
-        #     self.split_embeddings_h[f'w{i+1}'].requires_grad = not freeze
-        if case_num is not None:
-            if case_num == 1:
-                true_label = [(1)]
-            elif case_num == 2:
-                true_label = [(1)]
-            elif case_num == 3:
-                true_label = [(1)]
-
-            for i in range(len(self.dim1_splits)):
-                self.split_embeddings_v[f'w{i+1}'].requires_grad = ((i + 1) in true_label)
-                self.split_embeddings_h[f'w{i+1}'].requires_grad = ((i + 1) in true_label)
-
-        # concat + 슬라이싱
-        full_v = torch.cat([self.split_embeddings_v[f'w{i+1}'] for i in range(len(self.dim1_splits))], dim=1)
-        full_h = torch.cat([self.split_embeddings_h[f'w{i+1}'] for i in range(len(self.dim1_splits))], dim=1)
-
-        self.sample_embeddings_table_v = full_v[:, :sample_head_dim]
-        self.sample_embeddings_table_h = full_h[:, :sample_head_dim]
-
-        # print("sample_head_dim : ", sample_head_dim)
-        # print("self.num_units : ", self.num_units)
-        # print("self.max_relative_position : ", self.max_relative_position)
-
-        # # requires_grad 상태 출력
-        # print(f"\n[🔍 RelativePosition2D_super - requires_grad status]")
-        # for key in self.split_embeddings_v:
-        #     print(f"  {key:10s} -> {self.split_embeddings_v[key].requires_grad}")
-
-        # # requires_grad 상태 출력
-        # print(f"\n[🔍 RelativePosition2D_super - requires_grad status]")
-        # for key in self.split_embeddings_h:
-        #     print(f"  {key:10s} -> {self.split_embeddings_h[key].requires_grad}")
-
-
+        self.sample_embeddings_table_h = self.embeddings_table_h[:,:sample_head_dim]
+        self.sample_embeddings_table_v = self.embeddings_table_v[:,:sample_head_dim]
 
     def calc_sampled_param_num(self):
         return self.sample_embeddings_table_h.numel() + self.sample_embeddings_table_v.numel()
@@ -94,8 +41,7 @@ class RelativePosition2D_super(nn.Module):
         # remove the first cls token distance computation
         length_q = length_q - 1
         length_k = length_k - 1
-        # device = self.embeddings_table_v.device
-        device = self.split_embeddings_v['w1'].device
+        device = self.embeddings_table_v.device
         range_vec_q = torch.arange(length_q, device=device)
         range_vec_k = torch.arange(length_k, device=device)
         # compute the row and column distance
@@ -127,20 +73,18 @@ class AttentionSuper(nn.Module):
         head_dim = super_embed_dim // num_heads
         self.scale = qk_scale or head_dim ** -0.5
         self.super_embed_dim = super_embed_dim
-        self.choices = choices
 
         self.fc_scale = scale
         self.change_qkv = change_qkv
         if change_qkv:
-            self.qkv = qkv_super(super_embed_dim, 3 * super_embed_dim, bias=qkv_bias, choices=choices)
+            self.qkv = qkv_super(super_embed_dim, 3 * super_embed_dim, bias=qkv_bias)
         else:
-            # self.qkv = LinearSuperOriginal(super_embed_dim, 3 * super_embed_dim, bias=qkv_bias)
-            self.qkv = LinearSuper(super_embed_dim, 3 * super_embed_dim, bias=qkv_bias, choices=choices, name="qkv")
+            self.qkv = LinearSuper(super_embed_dim, 3 * super_embed_dim, bias=qkv_bias)
 
         self.relative_position = relative_position
         if self.relative_position:
-            self.rel_pos_embed_k = RelativePosition2D_super(super_embed_dim //num_heads, max_relative_position, choices=choices)
-            self.rel_pos_embed_v = RelativePosition2D_super(super_embed_dim //num_heads, max_relative_position, choices=choices)
+            self.rel_pos_embed_k = RelativePosition2D_super(super_embed_dim //num_heads, max_relative_position)
+            self.rel_pos_embed_v = RelativePosition2D_super(super_embed_dim //num_heads, max_relative_position)
         self.max_relative_position = max_relative_position
         self.sample_qk_embed_dim = None
         self.sample_v_embed_dim = None
@@ -148,14 +92,7 @@ class AttentionSuper(nn.Module):
         self.sample_scale = None
         self.sample_in_embed_dim = None
 
-        self.sample_qk_embed_dim_prev = None
-        self.sample_v_embed_dim_prev = None
-        self.sample_num_heads_prev = None
-        self.sample_scale_prev = None
-        self.sample_in_embed_dim_prev = None
-
-        # self.proj = LinearSuperOriginal(super_embed_dim, super_embed_dim)
-        self.proj = LinearSuper(super_embed_dim, super_embed_dim, name="proj", choices=choices)
+        self.proj = LinearSuper(super_embed_dim, super_embed_dim)
 
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj_drop = nn.Dropout(proj_drop)

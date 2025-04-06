@@ -121,21 +121,21 @@ def sample_weight(split_weights, sample_in_dim, sample_out_dim, sample_in_dim_pr
     # key = f'w{i_end+1}_{j_end+1}'
     # split_weights[key].requires_grad = True
     
-    # if case_num is not None:
-    #     if case_num == 1:
-    #         true_label = [(1, 1)]
-    #     elif case_num == 2:
-    #         true_label = [(1, 2), (2, 1), (2, 2)]
-    #     elif case_num == 3:
-    #         true_label = [
-    #             (1, 3), (2, 3), (3, 3),
-    #             (3, 1), (3, 2)
-    #         ]
+    if case_num is not None:
+        if case_num == 1:
+            true_label = [(1, 1)]
+        elif case_num == 2:
+            true_label = [(1, 2), (2, 1), (2, 2)]
+        elif case_num == 3:
+            true_label = [
+                (1, 3), (2, 3), (3, 3),
+                (3, 1), (3, 2)
+            ]
 
-    #     for i in range(len(dim0_splits)):
-    #         for j in range(len(dim1_splits)):
-    #             key = f'w{i+1}_{j+1}'
-    #             split_weights[key].requires_grad = ((i + 1, j + 1) in true_label)
+        for i in range(len(dim0_splits)):
+            for j in range(len(dim1_splits)):
+                key = f'w{i+1}_{j+1}'
+                split_weights[key].requires_grad = ((i + 1, j + 1) in true_label)
 
     row_blocks = []
     for i in range(len(dim0_splits)):
@@ -162,16 +162,16 @@ def sample_bias(split_bias, sample_out_dim, sample_out_dim_prev, dim0_splits, ca
     #     split_bias[key].requires_grad = False
     # key = f'bias_{i_end+1}'
     # split_bias[key].requires_grad = True
-    # if case_num is not None:
-    #     if case_num == 1:
-    #         true_label = [(1)]
-    #     elif case_num == 2:
-    #         true_label = [(2)]
-    #     elif case_num == 3:
-    #         true_label = [(3)]
+    if case_num is not None:
+        if case_num == 1:
+            true_label = [(1)]
+        elif case_num == 2:
+            true_label = [(2)]
+        elif case_num == 3:
+            true_label = [(3)]
 
-    #     for i in range(len(dim0_splits)):
-    #         split_bias[f'bias_{i+1}'].requires_grad = ((i + 1) in true_label)
+        for i in range(len(dim0_splits)):
+            split_bias[f'bias_{i+1}'].requires_grad = ((i + 1) in true_label)
 
 
     full_bias = torch.cat([split_bias[f'bias_{i+1}'] for i in range(len(dim0_splits))], dim=0)

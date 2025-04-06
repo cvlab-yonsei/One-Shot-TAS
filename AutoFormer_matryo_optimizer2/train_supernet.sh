@@ -8,10 +8,15 @@
 # --min-param-limits 5 --param-limits 6 \
 # --log-file-path './log/search_tiny-curriculum-small-to-big_6M.log'
 
-python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train.py --data-path '/data' --gp \
+# python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train.py --data-path '/data' --gp \
+# --change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 500 --warmup-epochs 20 \
+# --output /OUTPUT_PATH --batch-size 128 \
+# --save_checkpoint_path 'checkpoint-matryo-optimizer-config-full-change-only-minimum-' --save_log_path './log/supernet_matryo-optimizer-full-change-p-to-f-module-config-only-minimum.log'
+
+python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train_only_supernet.py --data-path '/data' --gp \
 --change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 500 --warmup-epochs 20 \
 --output /OUTPUT_PATH --batch-size 128 \
---save_checkpoint_path 'checkpoint-matryo-optimizer-config-full-change-only-minimum-' --save_log_path './log/supernet_matryo-optimizer-full-change-p-to-f-module-config-only-minimum.log'
+--save_checkpoint_path 'checkpoint-matryo-optimizer-config-full-change-only-minimum-' --save_log_path './log/supernet_matryo-optimizer-full-change-p-to-f-module-config-only-minimum.log' --interval 1
 
 # python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train.py --data-path '/data' --gp \
 # --change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 500 --warmup-epochs 20 \
