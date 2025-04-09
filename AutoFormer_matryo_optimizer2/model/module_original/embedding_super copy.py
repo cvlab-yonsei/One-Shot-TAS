@@ -36,24 +36,13 @@ class PatchembedConvSuper(nn.Conv2d):
         self.sampled_weight = None
         self.sampled_bias = None
 
-    def set_sample_config(self, sample_embed_dim, case_num=None):
+    def set_sample_config(self, sample_embed_dim):
         j_end = next(i for i, v in enumerate(self.dim0_splits) if v >= sample_embed_dim)
-        # for i in range(len(self.dim0_splits)):
-        #     w = self.split_weights[f'w{i+1}']
-        #     b = self.split_biases[f'b{i+1}']
-        #     w.requires_grad = (i == j_end)
-        #     b.requires_grad = (i == j_end)
-        if case_num is not None:
-            if case_num == 1:
-                true_label = [(1)]
-            elif case_num == 2:
-                true_label = [(2)]
-            elif case_num == 3:
-                true_label = [(3)]
-
-            for i in range(len(self.dim0_splits)):
-                self.split_weights[f'w{i+1}'].requires_grad = ((i + 1) in true_label)
-                self.split_biases[f'b{i+1}'].requires_grad = ((i + 1) in true_label)
+        for i in range(len(self.dim0_splits)):
+            w = self.split_weights[f'w{i+1}']
+            b = self.split_biases[f'b{i+1}']
+            w.requires_grad = (i == j_end)
+            b.requires_grad = (i == j_end)
 
         weights = [self.split_weights[f'w{i+1}'] for i in range(j_end + 1)]
         biases = [self.split_biases[f'b{i+1}'] for i in range(j_end + 1)]
@@ -107,11 +96,11 @@ class PatchembedSuper(nn.Module):
 
         self.proj = PatchembedConvSuper(in_chans, embed_dim, patch_size, choices)
 
-    def set_sample_config(self, sample_embed_dim, sample_embed_dim_prev=None, case_num=None):
+    def set_sample_config(self, sample_embed_dim, sample_embed_dim_prev=None):
         self.sample_embed_dim = sample_embed_dim
         # self.sampled_weight = self.proj.weight[:sample_embed_dim, ...]
         # self.sampled_bias = self.proj.bias[:self.sample_embed_dim, ...]
-        self.proj.set_sample_config(sample_embed_dim, case_num=case_num)
+        self.proj.set_sample_config(sample_embed_dim)
         if self.scale:
             self.sampled_scale = self.super_embed_dim / sample_embed_dim
 

@@ -302,8 +302,8 @@ def sample_configs(choices):
 def sample_configs_curriculum(choices, epoch=None, curriculum_epoch=None):
     config = {}
     dimensions = ['mlp_ratio', 'num_heads']
-    depth = random.choice(choices['depth'])
-    # depth = 14
+    # depth = random.choice(choices['depth'])
+    depth = 12
 
     if epoch is None:
         config['embed_dim'] = [192] * depth
@@ -312,8 +312,11 @@ def sample_configs_curriculum(choices, epoch=None, curriculum_epoch=None):
 
     elif epoch < curriculum_epoch[1]:
         config['embed_dim'] = [192] * depth
-        config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 1])[0] for _ in range(depth)]
-        config['num_heads'] = [random.choices([3, 4], weights=[1, 1])[0] for _ in range(depth)]
+        config['mlp_ratio'] = [3.5] * depth
+        config['num_heads'] = [3] * depth
+        # config['embed_dim'] = [192] * depth
+        # config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 1])[0] for _ in range(depth)]
+        # config['num_heads'] = [random.choices([3, 4], weights=[1, 1])[0] for _ in range(depth)]
 
     elif epoch >= curriculum_epoch[1] and epoch < curriculum_epoch[2]:
         config['embed_dim'] = [216] * depth
@@ -358,18 +361,19 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
     global_iter = epoch * len(data_loader) 
 
-    curriculum_epoch = [0, 399, 470]
+    # curriculum_epoch = [0, 399, 470]
+    curriculum_epoch = [0, 500, 501]
     case_num = None
 
     if epoch in curriculum_epoch:
         case_num = curriculum_epoch.index(epoch) + 1
-        # case_num = None
-        # 매 iteration마다 학습 가능한 파라미터만 포함하도록 새 optimizer를 생성
-        optimizer = create_optimizer(
-            args, 
-            [p for p in model.parameters() if p.requires_grad]
-        )
-        lr_scheduler.optimizer = optimizer
+        # # case_num = None
+        # # 매 iteration마다 학습 가능한 파라미터만 포함하도록 새 optimizer를 생성
+        # optimizer = create_optimizer(
+        #     args, 
+        #     [p for p in model.parameters() if p.requires_grad]
+        # )
+        # lr_scheduler.optimizer = optimizer
 
     print("case_num : ", case_num)
 
@@ -412,9 +416,9 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             # for group in optimizer.param_groups:
             #     group['lr'] = current_lr
 
-            current_lr = manual_lr_schedule(epoch, args)
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = current_lr
+            # current_lr = manual_lr_schedule(epoch, args)
+            # for param_group in optimizer.param_groups:
+            #     param_group['lr'] = current_lr
 
         elif mode == 'retrain':
             config = retrain_config
@@ -470,7 +474,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
-    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}, prev_step_config, optimizer
+    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}, prev_step_config
 
 @torch.no_grad()
 def evaluate(data_loader, model, device, amp=True, choices=None, mode='super', retrain_config=None, epoch=None, prev_step_config=None):
@@ -479,13 +483,14 @@ def evaluate(data_loader, model, device, amp=True, choices=None, mode='super', r
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Test:'
 
-    curriculum_epoch = [0, 399, 470]
+    # curriculum_epoch = [0, 399, 470]
+    curriculum_epoch = [0, 500, 501]
 
     # switch to evaluation mode
     model.eval()
     if mode == 'super':
-        # config = sample_configs(choices=choices)
-        config = sample_configs_curriculum(choices=choices, epoch=epoch, curriculum_epoch=curriculum_epoch) 
+        config = sample_configs(choices=choices)
+        # config = sample_configs_curriculum(choices=choices, epoch=epoch, curriculum_epoch=curriculum_epoch) 
         model_module = unwrap_model(model)
         model_module.set_sample_config(config=config)
     else:
