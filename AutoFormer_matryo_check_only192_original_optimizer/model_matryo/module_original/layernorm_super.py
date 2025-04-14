@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class LayerNormSuper(torch.nn.LayerNorm):
-    def __init__(self, super_embed_dim):
+    def __init__(self, super_embed_dim, choices=None):
         super().__init__(super_embed_dim)
 
         # the largest embed dim
@@ -15,6 +15,8 @@ class LayerNormSuper(torch.nn.LayerNorm):
 
         self.samples = {}
         self.profiling = False
+
+        # torch.nn.LayerNorm 특성상 self.weight랑 self.bias밖에 못쓴다?
 
     def profile(self, mode=True):
         self.profiling = mode
@@ -31,7 +33,6 @@ class LayerNormSuper(torch.nn.LayerNorm):
 
     def set_sample_config(self, sample_embed_dim, sample_embed_dim_prev=None):
         self.sample_embed_dim = sample_embed_dim
-        # 여기서 weight, bias 그냥 degrad?
         self._sample_parameters()
 
     def forward(self, x):

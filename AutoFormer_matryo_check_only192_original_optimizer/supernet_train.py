@@ -14,25 +14,17 @@ from timm.scheduler import create_scheduler
 from timm.optim import create_optimizer
 from timm.utils import NativeScaler
 from lib.datasets import build_dataset
-from supernet_engine_sn1 import train_one_epoch, evaluate
-from supernet_engine_only_supernet import train_one_epoch_original, evaluate_original
+from supernet_engine import train_one_epoch, evaluate
 from lib.samplers import RASampler
 from lib import utils
 from lib.config import cfg, update_config_from_file
 from model.supernet_transformer import Vision_TransformerSuper
 
+
 import sys
 import warnings
 
 import math
-
-
-# # UserWarning 무시
-# warnings.filterwarnings("ignore", category=UserWarning)
-
-# sys.stdout = open('./log/supernet_greedy_spectral_norm_400ep_interval_5_topk.log', 'w')
-# sys.stderr = sys.stdout
-
 
 def get_args_parser():
     parser = argparse.ArgumentParser('AutoFormer training and evaluation script', add_help=False)
@@ -62,7 +54,7 @@ def get_args_parser():
     parser.add_argument('--drop', type=float, default=0.0, metavar='PCT',
                         help='Dropout rate (default: 0.)')
     parser.add_argument('--drop-path', type=float, default=0.1, metavar='PCT',
-                        help='Drop path rate (default: 0.1)') # 0.1-> 0.0
+                        help='Drop path rate (default: 0.1)')
     parser.add_argument('--drop-block', type=float, default=None, metavar='PCT',
                         help='Drop block rate (default: None)')
 
@@ -86,11 +78,8 @@ def get_args_parser():
                         help='Clip gradient norm (default: None, no clipping)')
     parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
                         help='SGD momentum (default: 0.9)')
-    parser.add_argument('--weight-decay', type=float, default=0.02,
-                        help='weight decay (default: 0.02)') # pre-nas
-    # parser.add_argument('--weight-decay', type=float, default=0.05,
-    #                     help='weight decay (default: 0.05)') # original
-
+    parser.add_argument('--weight-decay', type=float, default=0.05,
+                        help='weight decay (default: 0.05)')
 
     # Learning rate schedule parameters
     parser.add_argument('--sched', default='cosine', type=str, metavar='SCHEDULER',
@@ -112,7 +101,7 @@ def get_args_parser():
 
     parser.add_argument('--decay-epochs', type=float, default=30, metavar='N',
                         help='epoch interval to decay LR')
-    parser.add_argument('--warmup-epochs', type=int, default=20, metavar='N',
+    parser.add_argument('--warmup-epochs', type=int, default=5, metavar='N',
                         help='epochs to warmup LR, if scheduler supports')
     parser.add_argument('--cooldown-epochs', type=int, default=10, metavar='N',
                         help='epochs to cooldown LR at min_lr, after cyclic schedule ends')
@@ -124,18 +113,14 @@ def get_args_parser():
     # Augmentation parameters
     parser.add_argument('--color-jitter', type=float, default=0.4, metavar='PCT',
                         help='Color jitter factor (default: 0.4)')
-    # parser.add_argument('--aa', type=str, default='rand-m9-mstd0.5-inc1', metavar='NAME',
-    #                     help='Use AutoAugment policy. "v0" or "original". " + \
-    #                          "(default: rand-m9-mstd0.5-inc1)'),
-    parser.add_argument('--aa', type=str, default='rand-m9-n2-mstd0.5-inc1', metavar='NAME',
-                    help='Use RandAugment policy "rand-m9-n2-mstd0.5-inc1".')
+    parser.add_argument('--aa', type=str, default='rand-m9-mstd0.5-inc1', metavar='NAME',
+                        help='Use AutoAugment policy. "v0" or "original". " + \
+                             "(default: rand-m9-mstd0.5-inc1)'),
     parser.add_argument('--smoothing', type=float, default=0.1, help='Label smoothing (default: 0.1)')
     parser.add_argument('--train-interpolation', type=str, default='bicubic',
                         help='Training interpolation (random, bilinear, bicubic default: "bicubic")')
 
     parser.add_argument('--repeated-aug', action='store_true')
-    parser.set_defaults(repeated_aug=True)
-    
     parser.add_argument('--no-repeated-aug', action='store_false', dest='repeated_aug')
 
 
@@ -152,34 +137,16 @@ def get_args_parser():
                         help='Do not random erase first (clean) augmentation split')
 
     # * Mixup params
-    # original
-    # parser.add_argument('--mixup', type=float, default=0.8,
-    #                     help='mixup alpha, mixup enabled if > 0. (default: 0.8)')
-    # parser.add_argument('--cutmix', type=float, default=1.0,
-    #                     help='cutmix alpha, cutmix enabled if > 0. (default: 1.0)')
-    # parser.add_argument('--cutmix-minmax', type=float, nargs='+', default=None,
-    #                     help='cutmix min/max ratio, overrides alpha and enables cutmix if set (default: None)')
-    # parser.add_argument('--mixup-prob', type=float, default=1.0,
-    #                     help='Probability of performing mixup or cutmix when either/both is enabled')
-    # parser.add_argument('--mixup-switch-prob', type=float, default=0.5,
-    #                     help='Probability of switching to cutmix when both mixup and cutmix enabled')
-    # parser.add_argument('--mixup-mode', type=str, default='batch',
-    #                     help='How to apply mixup/cutmix params. Per "batch", "pair", or "elem"')
-    
-    # pre-nas aug
-    parser.add_argument('--mixup', type=float, default=0.0,
-                        help='mixup alpha, mixup disabled if 0. (default: 0.0)')
-    parser.add_argument('--cutmix', type=float, default=0.0,
-                        help='cutmix alpha, cutmix disabled if 0. (default: 0.0)')
-    parser.add_argument('--mixup-switch-prob', type=float, default=0.0,
-                        help='Probability of switching to cutmix when both mixup and cutmix enabled (default: 0.0)')
-
+    parser.add_argument('--mixup', type=float, default=0.8,
+                        help='mixup alpha, mixup enabled if > 0. (default: 0.8)')
+    parser.add_argument('--cutmix', type=float, default=1.0,
+                        help='cutmix alpha, cutmix enabled if > 0. (default: 1.0)')
     parser.add_argument('--cutmix-minmax', type=float, nargs='+', default=None,
                         help='cutmix min/max ratio, overrides alpha and enables cutmix if set (default: None)')
     parser.add_argument('--mixup-prob', type=float, default=1.0,
                         help='Probability of performing mixup or cutmix when either/both is enabled')
-    # parser.add_argument('--mixup-switch-prob', type=float, default=0.5,
-    #                     help='Probability of switching to cutmix when both mixup and cutmix enabled')
+    parser.add_argument('--mixup-switch-prob', type=float, default=0.5,
+                        help='Probability of switching to cutmix when both mixup and cutmix enabled')
     parser.add_argument('--mixup-mode', type=str, default='batch',
                         help='How to apply mixup/cutmix params. Per "batch", "pair", or "elem"')
 
@@ -224,38 +191,8 @@ def get_args_parser():
 
     return parser
 
-
-
-def manual_lr_schedule(epoch, args):
-    """
-    Calculate the learning rate manually based on warmup and cosine decay.
-    Args:
-        epoch (int): Current epoch number
-        args: argparse.Namespace containing training hyperparameters
-    Returns:
-        float: learning rate for current epoch
-    """
-
-    base_lr = args.lr              # e.g. 5e-4
-    min_lr = args.min_lr           # e.g. 1e-5
-    warmup_lr = args.warmup_lr     # e.g. 1e-6
-    warmup_epochs = args.warmup_epochs  # e.g. 20
-    total_epochs = args.epochs     # e.g. 500
-
-    if epoch < warmup_epochs:
-        # Linear warmup from warmup_lr to base_lr
-        lr = warmup_lr + (base_lr - warmup_lr) * (epoch / warmup_epochs)
-    else:
-        # Cosine decay after warmup
-        decay_epoch = epoch - warmup_epochs
-        decay_total = total_epochs - warmup_epochs
-        cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_epoch / decay_total))
-        lr = min_lr + (base_lr - min_lr) * cosine_decay
-
-    return lr
-
 def main(args):
-    
+
     # UserWarning 무시
     warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -329,10 +266,6 @@ def main(args):
 
     print(f"Creating SuperVisionTransformer")
     print(cfg)
-
-    choices = {'num_heads': cfg.SEARCH_SPACE.NUM_HEADS, 'mlp_ratio': cfg.SEARCH_SPACE.MLP_RATIO,
-               'embed_dim': cfg.SEARCH_SPACE.EMBED_DIM , 'depth': cfg.SEARCH_SPACE.DEPTH}
-
     model = Vision_TransformerSuper(img_size=args.input_size,
                                     patch_size=args.patch_size,
                                     embed_dim=cfg.SUPERNET.EMBED_DIM, depth=cfg.SUPERNET.DEPTH,
@@ -343,10 +276,11 @@ def main(args):
                                     num_classes=args.nb_classes,
                                     max_relative_position=args.max_relative_position,
                                     relative_position=args.relative_position,
-                                    change_qkv=args.change_qkv, abs_pos=not args.no_abs_pos,
-                                    choices=choices)
+                                    change_qkv=args.change_qkv, abs_pos=not args.no_abs_pos)
 
-    
+    choices = {'num_heads': cfg.SEARCH_SPACE.NUM_HEADS, 'mlp_ratio': cfg.SEARCH_SPACE.MLP_RATIO,
+               'embed_dim': cfg.SEARCH_SPACE.EMBED_DIM , 'depth': cfg.SEARCH_SPACE.DEPTH}
+
     model.to(device)
     if args.teacher_model:
         teacher_model = create_model(
@@ -365,7 +299,7 @@ def main(args):
     model_without_ddp = model
     if args.distributed:
 
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True) # 이거 원래 True
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module
 
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -373,8 +307,7 @@ def main(args):
 
     linear_scaled_lr = args.lr * args.batch_size * utils.get_world_size() / 512.0
     args.lr = linear_scaled_lr
-    # optimizer = create_optimizer(args, model_without_ddp)
-    optimizer = create_optimizer(args, [p for p in model_without_ddp.parameters() if p.requires_grad])
+    optimizer = create_optimizer(args, model_without_ddp)
     loss_scaler = NativeScaler()
     lr_scheduler, _ = create_scheduler(args, optimizer)
 
@@ -423,84 +356,19 @@ def main(args):
     print("Start training")
     start_time = time.time()
     max_accuracy = 0.0
-    
-    # Initialize candidate pool and pool sampling probability
-    candidate_pool = []
-    pool_sampling_prob = 0  # Start with 0, gradually increase
 
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
-        
-        # pool_sampling_prob = 0.0
-        pool_sampling_prob = 0.8
-        # # pool_sampling_prob = min(0.8, epoch / args.epochs)
-        if epoch < 600:
-            pool_sampling_prob = 0
-        elif 600 <= epoch <= args.epochs:
-            pool_sampling_prob = min(0.8, (epoch - 600) / 100)
-        else:
-            pool_sampling_prob = 0.8
-            
-        # if epoch < 400:
-        #     pool_sampling_prob = 0
-        # elif 400 <= epoch <= args.epochs:
-        #     pool_sampling_prob = min(0.8, (epoch - 400) / 100)
-        # else:
-        #     pool_sampling_prob = 0.8
-            
 
-        if epoch < 600:
-            curriculum_epoch = [0, 399, 470]
-            case_num = None
-
-            # 학습률 설정 (manual 방식)
-            current_lr = manual_lr_schedule(epoch, args)
-            for param_group in optimizer.param_groups:
-                param_group["lr"] = current_lr
-
-            if epoch in curriculum_epoch:
-                case_num = curriculum_epoch.index(epoch) + 1
-                # case_num = None
-                # 매 iteration마다 학습 가능한 파라미터만 포함하도록 새 optimizer를 생성
-                optimizer = create_optimizer(
-                    args, 
-                    [p for p in model.parameters() if p.requires_grad]
-                )
-
-                for param_group in optimizer.param_groups:
-                    param_group["lr"] = current_lr
-                # lr_scheduler.optimizer = optimizer
-
-            print("case_num : ", case_num)
-            
-            train_stats = train_one_epoch_original(
-                model, criterion, data_loader_train,
-                optimizer, device, epoch, loss_scaler,
-                args.clip_grad, model_ema, mixup_fn,
-                amp=args.amp, teacher_model=teacher_model,
-                teach_loss=teacher_loss,
-                choices=choices, mode = args.mode, retrain_config=retrain_config, case_num=case_num, curriculum_epoch=curriculum_epoch
-            )
-            
-        else:
-            print("pool_sampling_prob : ", pool_sampling_prob)
-            
-            train_stats = train_one_epoch(
-                model, criterion, data_loader_train,
-                optimizer, device, epoch, loss_scaler,
-                args.clip_grad, model_ema, mixup_fn,
-                amp=args.amp, teacher_model=teacher_model,
-                teach_loss=teacher_loss,
-                choices=choices, mode = args.mode, retrain_config=retrain_config,
-                candidate_pool=candidate_pool, 
-                # validation_data_loader=data_loader_val, 
-                pool_sampling_prob=pool_sampling_prob,  # Pass candidate_pool and sampling probability
-                m=2500,  # Number of sampled paths
-                k=1250,    # Number of top paths to train on
-                interval=args.interval
-            )
-            
+        train_stats = train_one_epoch(
+            model, criterion, data_loader_train,
+            optimizer, device, epoch, loss_scaler,
+            args.clip_grad, model_ema, mixup_fn,
+            amp=args.amp, teacher_model=teacher_model,
+            teach_loss=teacher_loss,
+            choices=choices, mode = args.mode, retrain_config=retrain_config,
+        )
 
         lr_scheduler.step(epoch)
         if args.output_dir:
@@ -518,7 +386,7 @@ def main(args):
                     'args': args,
                 }, checkpoint_path)
 
-        test_stats = evaluate_original(data_loader_val, model, device, amp=args.amp, choices=choices, mode = args.mode, retrain_config=retrain_config, epoch=epoch, curriculum_epoch=curriculum_epoch)
+        test_stats = evaluate(data_loader_val, model, device, amp=args.amp, choices=choices, mode = args.mode, retrain_config=retrain_config)
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
         max_accuracy = max(max_accuracy, test_stats["acc1"])
         print(f'Max accuracy: {max_accuracy:.2f}%')

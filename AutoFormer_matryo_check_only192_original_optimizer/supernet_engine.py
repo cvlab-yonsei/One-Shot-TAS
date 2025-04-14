@@ -10,36 +10,6 @@ from lib import utils
 import random
 import time
 
-def sample_configs_curriculum(choices, epoch=None, curriculum_epoch=None):
-    config = {}
-    dimensions = ['mlp_ratio', 'num_heads']
-    depth = random.choice(choices['depth'])
-    # depth = 12
-
-    if epoch is None:
-        config['embed_dim'] = [192] * depth
-        config['mlp_ratio'] = [3.5] * depth
-        config['num_heads'] = [3] * depth
-
-    elif epoch < curriculum_epoch[1]:
-        config['embed_dim'] = [192] * depth
-        config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 1])[0] for _ in range(depth)]
-        config['num_heads'] = [random.choices([3, 4], weights=[1, 1])[0] for _ in range(depth)]
-
-    elif epoch >= curriculum_epoch[1] and epoch < curriculum_epoch[2]:
-        config['embed_dim'] = [216] * depth
-        config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 1])[0] for _ in range(depth)]
-        config['num_heads'] = [random.choices([3, 4], weights=[1, 1])[0] for _ in range(depth)]
-
-    else:
-        config['embed_dim'] = [240] * depth
-        config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 1])[0] for _ in range(depth)]
-        config['num_heads'] = [random.choices([3, 4], weights=[1, 1])[0] for _ in range(depth)]
-
-    config['layer_num'] = depth
-    return config
-
-
 def sample_configs(choices):
 
     config = {}
@@ -53,12 +23,12 @@ def sample_configs(choices):
     config['layer_num'] = depth
     return config
 
-def train_one_epoch_original(model: torch.nn.Module, criterion: torch.nn.Module,
+def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, loss_scaler, max_norm: float = 0,
                     model_ema: Optional[ModelEma] = None, mixup_fn: Optional[Mixup] = None,
                     amp: bool = True, teacher_model: torch.nn.Module = None,
-                    teach_loss: torch.nn.Module = None, choices=None, mode='super', retrain_config=None, case_num=None, curriculum_epoch=None):
+                    teach_loss: torch.nn.Module = None, choices=None, mode='super', retrain_config=None):
     model.train()
     criterion.train()
 
@@ -75,24 +45,16 @@ def train_one_epoch_original(model: torch.nn.Module, criterion: torch.nn.Module,
         print(config)
         model_module.set_sample_config(config=config)
         print(model_module.get_sampled_params_numel(config))
-    config = sample_configs_curriculum(choices=choices, epoch=epoch, curriculum_epoch=curriculum_epoch)  
-    print("config : ", config)
+
     for samples, targets in metric_logger.log_every(data_loader, print_freq, header):
         samples = samples.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
 
         # sample random config
         if mode == 'super':
-            # config = {
-            #     'layer_num': 12,
-            #     'mlp_ratio': [3.5] * 12,
-            #     'num_heads': [3] * 12,
-            #     'embed_dim': [192] * 12
-            # }
-            config = sample_configs_curriculum(choices=choices, epoch=epoch, curriculum_epoch=curriculum_epoch)  
-            # config = sample_configs(choices=choices)
+            config = sample_configs(choices=choices)
             model_module = unwrap_model(model)
-            model_module.set_sample_config(config=config, case_num=case_num)
+            model_module.set_sample_config(config=config)
         elif mode == 'retrain':
             config = retrain_config
             model_module = unwrap_model(model)
@@ -150,7 +112,7 @@ def train_one_epoch_original(model: torch.nn.Module, criterion: torch.nn.Module,
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 @torch.no_grad()
-def evaluate_original(data_loader, model, device, amp=True, choices=None, mode='super', retrain_config=None, epoch=None, curriculum_epoch=None):
+def evaluate(data_loader, model, device, amp=True, choices=None, mode='super', retrain_config=None):
     criterion = torch.nn.CrossEntropyLoss()
 
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -159,8 +121,7 @@ def evaluate_original(data_loader, model, device, amp=True, choices=None, mode='
     # switch to evaluation mode
     model.eval()
     if mode == 'super':
-        config = sample_configs_curriculum(choices=choices, epoch=epoch, curriculum_epoch=curriculum_epoch)
-        # config = sample_configs(choices=choices)
+        config = sample_configs(choices=choices)
         model_module = unwrap_model(model)
         model_module.set_sample_config(config=config)
     else:

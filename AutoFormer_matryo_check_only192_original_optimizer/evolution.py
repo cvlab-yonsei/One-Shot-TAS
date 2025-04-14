@@ -9,8 +9,8 @@ from pathlib import Path
 from lib.datasets import build_dataset
 from lib import utils
 from supernet_engine import evaluate
-# from model.supernet_transformer import Vision_TransformerSuper
-from model_original2.supernet_transformer import Vision_TransformerSuper
+from model.supernet_transformer import Vision_TransformerSuper
+# from model_original2.supernet_transformer import Vision_TransformerSuper
 import argparse
 import os
 import yaml
@@ -137,7 +137,7 @@ class EvolutionSearcher(object):
         choices = {
             'num_heads': [3, 4],
             'mlp_ratio': [3.5, 4.0],
-            'embed_dim': [216],
+            'embed_dim': [192],
             'depth': [12, 13, 14]
         }
         # choices = {
@@ -479,7 +479,7 @@ def get_args_parser():
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
-    parser.add_argument('--dist_url', default='tcp://localhost:2040', help='url used to set up distributed training')
+    parser.add_argument('--dist_url', default='tcp://localhost:2041', help='url used to set up distributed training')
     parser.add_argument('--amp', action='store_true')
     parser.add_argument('--no-amp', action='store_false', dest='amp')
     parser.set_defaults(amp=True)
