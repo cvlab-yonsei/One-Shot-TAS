@@ -51,8 +51,8 @@ def get_args_parser():
 
     parser.add_argument('--drop', type=float, default=0.0, metavar='PCT',
                         help='Dropout rate (default: 0.)')
-    parser.add_argument('--drop-path', type=float, default=0.1, metavar='PCT',
-                        help='Drop path rate (default: 0.1)')
+    parser.add_argument('--drop-path', type=float, default=0.0, metavar='PCT',
+                        help='Drop path rate (default: 0.1)') # 0.1 -> 0.0
     parser.add_argument('--drop-block', type=float, default=None, metavar='PCT',
                         help='Drop block rate (default: None)')
 

@@ -56,9 +56,9 @@ class RelativePosition2D_super(nn.Module):
             if case_num == 1:
                 true_label = [(1)]
             elif case_num == 2:
-                true_label = [(1)]
+                true_label = [()] # (1) -> ()
             elif case_num == 3:
-                true_label = [(1)]
+                true_label = [()]
 
             for i in range(len(self.dim1_splits)):
                 self.split_embeddings_v[f'w{i+1}'].requires_grad = ((i + 1) in true_label)
@@ -76,7 +76,7 @@ class RelativePosition2D_super(nn.Module):
         # print("self.max_relative_position : ", self.max_relative_position)
 
         # # requires_grad 상태 출력
-        # print(f"\n[🔍 RelativePosition2D_super - requires_grad status]")
+        # print(f"\n[🔍 RelativePosition2D_super - requires_grad sstatus]")
         # for key in self.split_embeddings_v:
         #     print(f"  {key:10s} -> {self.split_embeddings_v[key].requires_grad}")
 

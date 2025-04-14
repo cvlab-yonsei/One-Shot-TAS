@@ -13,10 +13,21 @@
 # --output /OUTPUT_PATH --batch-size 128 \
 # --save_checkpoint_path 'checkpoint-matryo-optimizer-config-full-change-only-minimum-' --save_log_path './log/supernet_matryo-optimizer-full-change-p-to-f-module-config-only-minimum.log'
 
-python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train_only_supernet.py --data-path '/data' --gp \
+python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train_only_supernet.py --data-path '/dataset/ILSVRC2012' --gp \
+--change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 500 --warmup-epochs 20 \
+--resume '/OUTPUT_PATH/checkpoint-matryo-optimizer-config-full-change-only-minimum-19.pth' --output /OUTPUT_PATH --batch-size 128 \
+--save_checkpoint_path 'checkpoint-matryo-optimizer-config-full-change-only-minimum-' --save_log_path './log/supernet_matryo-optimizer-full-change-p-to-f-module-config-only-minimum.log' --interval 1
+
+python -m torch.distributed.launch --nproc_per_node=8 --use_env ../AutoFormer_original_check_only192/supernet_train.py --data-path '/dataset/ILSVRC2012' --gp \
 --change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 500 --warmup-epochs 20 \
 --output /OUTPUT_PATH --batch-size 128 \
---save_checkpoint_path 'checkpoint-matryo-optimizer-config-full-change-only-minimum-' --save_log_path './log/supernet_matryo-optimizer-full-change-p-to-f-module-config-only-minimum.log' --interval 1
+--save_checkpoint_path 'checkpoint-original-only192-' --save_log_path './log/supernet_original_only192.log'
+
+python -m torch.distributed.launch --nproc_per_node=8 --use_env ../AutoFormer_original_check_only192/supernet_train.py --data-path '/dataset/ILSVRC2012' --gp \
+--change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 400 --warmup-epochs 16 \
+--output /OUTPUT_PATH --batch-size 128 \
+--save_checkpoint_path 'checkpoint-original-only192-400ep-droppath0-' --save_log_path './log/supernet_original_only192_400ep_droppath0.log'
+
 
 # python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train.py --data-path '/data' --gp \
 # --change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 500 --warmup-epochs 20 \

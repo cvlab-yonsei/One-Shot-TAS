@@ -11,7 +11,6 @@ class LayerNormSuper(torch.nn.LayerNorm):
 
         # the current sampled embed dim
         self.sample_embed_dim = None
-        self.sample_embed_dim_prev = None
 
         self.samples = {}
         self.profiling = False
@@ -29,12 +28,8 @@ class LayerNormSuper(torch.nn.LayerNorm):
         self.samples['bias'] = self.bias[:self.sample_embed_dim]
         return self.samples
 
-    def set_sample_config(self, sample_embed_dim, sample_embed_dim_prev=None, case_num=None):
+    def set_sample_config(self, sample_embed_dim):
         self.sample_embed_dim = sample_embed_dim
-        if case_num == 2 or case_num == 3:
-            self.weight.requires_grad = False
-            self.bias.requires_grad = False
-        # 여기서 weight, bias 그냥 degrad?
         self._sample_parameters()
 
     def forward(self, x):
