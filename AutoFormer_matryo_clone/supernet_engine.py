@@ -15,12 +15,37 @@ import time
 
 import math
 
+# def manual_lr_schedule(epoch, args):
+#     # 고정 시작 learning rate
+#     start_lr = 1e-4
+#     min_lr = args.min_lr         # 예: 1e-5
+#     total_epochs = args.epochs   # 예: 100
+#     half = total_epochs // 2     # 예: 50
+
+#     # 두 구간 중 어떤 절반인지 판단
+#     if epoch < half:
+#         # 첫 번째 절반: 0 ~ 49
+#         epoch_in_half = epoch
+#     else:
+#         # 두 번째 절반: 50 ~ 99 → 상대 epoch: 0 ~ 49
+#         epoch_in_half = epoch - half
+
+#     # 해당 절반 내에서 cosine decay 적용
+#     decay_progress = epoch_in_half / (half - 1)
+#     cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_progress))
+#     current_lr = min_lr + (start_lr - min_lr) * cosine_decay
+
+#     return current_lr
+
+import math
+
 def manual_lr_schedule(epoch, args):
-    # 고정 시작 learning rate
-    start_lr = 1e-4
-    min_lr = args.min_lr         # 예: 1e-5
-    total_epochs = args.epochs   # 예: 100
-    half = total_epochs // 2     # 예: 50
+    warmup_epochs = 2
+    warmup_start_lr = 1e-5            # 워밍업 시작 learning rate
+    start_lr = 3e-4                    # 워밍업 이후 cosine decay 시작 learning rate
+    min_lr = args.min_lr              # 예: 1e-5
+    total_epochs = args.epochs        # 예: 100
+    half = total_epochs // 2          # 예: 50
 
     # 두 구간 중 어떤 절반인지 판단
     if epoch < half:
@@ -30,12 +55,18 @@ def manual_lr_schedule(epoch, args):
         # 두 번째 절반: 50 ~ 99 → 상대 epoch: 0 ~ 49
         epoch_in_half = epoch - half
 
-    # 해당 절반 내에서 cosine decay 적용
-    decay_progress = epoch_in_half / (half - 1)
-    cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_progress))
-    current_lr = min_lr + (start_lr - min_lr) * cosine_decay
+    if epoch_in_half < warmup_epochs:
+        # 선형 워밍업
+        progress = epoch_in_half / warmup_epochs
+        current_lr = warmup_start_lr + (start_lr - warmup_start_lr) * progress
+    else:
+        # cosine decay
+        decay_progress = (epoch_in_half - warmup_epochs) / (half - warmup_epochs)
+        cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_progress))
+        current_lr = min_lr + (start_lr - min_lr) * cosine_decay
 
     return current_lr
+
 
 
 def sample_configs(choices):
@@ -55,8 +86,8 @@ def sample_configs(choices):
 def sample_configs_curriculum(choices, epoch=None, curriculum_epoch=None):
     config = {}
     dimensions = ['mlp_ratio', 'num_heads']
-    # depth = random.choice(choices['depth'])
-    depth = 12
+    depth = random.choice(choices['depth'])
+    # depth = 12
 
     if epoch is None:
         config['embed_dim'] = [192] * depth

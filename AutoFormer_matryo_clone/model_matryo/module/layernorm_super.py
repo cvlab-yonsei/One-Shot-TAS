@@ -31,7 +31,12 @@ class LayerNormSuper(torch.nn.LayerNorm):
 
     def set_sample_config(self, sample_embed_dim, sample_embed_dim_prev=None):
         self.sample_embed_dim = sample_embed_dim
+
         # 여기서 weight, bias 그냥 degrad?
+        ## 그냥 freeze 완전히 아래 코드
+        self.weight.requires_grad = False
+        self.bias.requires_grad = False
+
         self._sample_parameters()
 
     def forward(self, x):
