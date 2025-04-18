@@ -4,69 +4,11 @@ from typing import Iterable, Optional
 from timm.utils.model import unwrap_model
 import torch
 
-from timm.scheduler import create_scheduler
-from timm.optim import create_optimizer
-
 from timm.data import Mixup
 from timm.utils import accuracy, ModelEma
 from lib import utils
 import random
 import time
-
-import math
-
-def manual_lr_schedule(epoch, args):
-    # 고정 시작 learning rate
-    start_lr = 3e-5
-    min_lr = args.min_lr         # 예: 1e-5
-    total_epochs = args.epochs   # 예: 100
-    half = total_epochs // 2     # 예: 50
-
-    # 두 구간 중 어떤 절반인지 판단
-    if epoch < half:
-        # 첫 번째 절반: 0 ~ 49
-        epoch_in_half = epoch
-    else:
-        # 두 번째 절반: 50 ~ 99 → 상대 epoch: 0 ~ 49
-        epoch_in_half = epoch - half
-
-    # 해당 절반 내에서 cosine decay 적용
-    decay_progress = epoch_in_half / (half - 1)
-    cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_progress))
-    current_lr = min_lr + (start_lr - min_lr) * cosine_decay
-
-    return current_lr
-
-
-# def manual_lr_schedule(epoch, args):
-#     warmup_epochs = 2
-#     warmup_start_lr = 1e-5            # 워밍업 시작 learning rate
-#     start_lr = 3e-4                    # 워밍업 이후 cosine decay 시작 learning rate
-#     min_lr = args.min_lr              # 예: 1e-5
-#     total_epochs = args.epochs        # 예: 100
-#     half = total_epochs // 2          # 예: 50
-
-#     # 두 구간 중 어떤 절반인지 판단
-#     if epoch < half:
-#         # 첫 번째 절반: 0 ~ 49
-#         epoch_in_half = epoch
-#     else:
-#         # 두 번째 절반: 50 ~ 99 → 상대 epoch: 0 ~ 49
-#         epoch_in_half = epoch - half
-
-#     if epoch_in_half < warmup_epochs:
-#         # 선형 워밍업
-#         progress = epoch_in_half / warmup_epochs
-#         current_lr = warmup_start_lr + (start_lr - warmup_start_lr) * progress
-#     else:
-#         # cosine decay
-#         decay_progress = (epoch_in_half - warmup_epochs) / (half - warmup_epochs)
-#         cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_progress))
-#         current_lr = min_lr + (start_lr - min_lr) * cosine_decay
-
-#     return current_lr
-
-
 
 def sample_configs(choices):
 
@@ -81,45 +23,12 @@ def sample_configs(choices):
     config['layer_num'] = depth
     return config
 
-
-def sample_configs_curriculum(choices, epoch=None, curriculum_epoch=None):
-    config = {}
-    dimensions = ['mlp_ratio', 'num_heads']
-    depth = random.choice(choices['depth'])
-    # depth = 12
-
-    if epoch is None:
-        config['embed_dim'] = [192] * depth
-        config['mlp_ratio'] = [3.5] * depth
-        config['num_heads'] = [3] * depth
-
-    elif epoch < curriculum_epoch[1]:
-        config['embed_dim'] = [192] * depth
-        config['mlp_ratio'] = [3.5] * depth
-        config['num_heads'] = [3] * depth
-        # config['embed_dim'] = [192] * depth
-        # config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 1])[0] for _ in range(depth)]
-        # config['num_heads'] = [random.choices([3, 4], weights=[1, 1])[0] for _ in range(depth)]
-
-    elif epoch >= curriculum_epoch[1] and epoch < curriculum_epoch[2]:
-        config['embed_dim'] = [216] * depth
-        config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 1])[0] for _ in range(depth)]
-        config['num_heads'] = [random.choices([3, 4], weights=[1, 1])[0] for _ in range(depth)]
-
-    else:
-        config['embed_dim'] = [240] * depth
-        config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 1])[0] for _ in range(depth)]
-        config['num_heads'] = [random.choices([3, 4], weights=[1, 1])[0] for _ in range(depth)]
-
-    config['layer_num'] = depth
-    return config
-
 def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, loss_scaler, max_norm: float = 0,
                     model_ema: Optional[ModelEma] = None, mixup_fn: Optional[Mixup] = None,
                     amp: bool = True, teacher_model: torch.nn.Module = None,
-                    teach_loss: torch.nn.Module = None, choices=None, mode='super', retrain_config=None, args=None):
+                    teach_loss: torch.nn.Module = None, choices=None, mode='super', retrain_config=None):
     model.train()
     criterion.train()
 
@@ -137,42 +46,15 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         model_module.set_sample_config(config=config)
         print(model_module.get_sampled_params_numel(config))
 
-    temp_optimizer = create_optimizer(args, [p for p in model.parameters() if p.requires_grad])
-    lr_scheduler, _ = create_scheduler(args, temp_optimizer)   
-
-    curriculum_epoch = [-1, 0, 50]
-    case_num = None
-
-    if epoch in curriculum_epoch:
-        case_num = curriculum_epoch.index(epoch) + 1
-        # # case_num = None
-        # 매 iteration마다 학습 가능한 파라미터만 포함하도록 새 optimizer를 생성
-        optimizer = create_optimizer(
-            args, 
-            [p for p in model.parameters() if p.requires_grad]
-        )
-        lr_scheduler.optimizer = optimizer
-
-    print("case_num : ", case_num)
-
-
     for samples, targets in metric_logger.log_every(data_loader, print_freq, header):
         samples = samples.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
 
         # sample random config
         if mode == 'super':
-            config = sample_configs_curriculum(choices=choices, epoch=epoch, curriculum_epoch=curriculum_epoch)    
+            config = sample_configs(choices=choices)
             model_module = unwrap_model(model)
-            model_module.set_sample_config(config=config, case_num=case_num)
-            # config = sample_configs(choices=choices)
-            # model_module = unwrap_model(model)
-            # model_module.set_sample_config(config=config)
-
-            current_lr = manual_lr_schedule(epoch, args)
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = current_lr
-
+            model_module.set_sample_config(config=config)
         elif mode == 'retrain':
             config = retrain_config
             model_module = unwrap_model(model)
@@ -227,22 +109,19 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
-    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}, optimizer
+    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 @torch.no_grad()
-def evaluate(data_loader, model, device, amp=True, choices=None, mode='super', retrain_config=None, epoch=None):
+def evaluate(data_loader, model, device, amp=True, choices=None, mode='super', retrain_config=None):
     criterion = torch.nn.CrossEntropyLoss()
 
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Test:'
 
-    curriculum_epoch = [-1, 0, 50]
-
     # switch to evaluation mode
     model.eval()
     if mode == 'super':
-        # config = sample_configs(choices=choices)
-        config = sample_configs_curriculum(choices=choices, epoch=epoch, curriculum_epoch=curriculum_epoch) 
+        config = sample_configs(choices=choices)
         model_module = unwrap_model(model)
         model_module.set_sample_config(config=config)
     else:
