@@ -54,11 +54,17 @@ def init_model_matryo_from_model(model, model_matryo):
                     full_weight = model_dict[base_name]
 
                     if '_' in split_name:  # ex: w2_1
-                        i, j = map(int, split_name.replace('w', '').split('_'))
-                        dim0 = sum(module.split_weights[f'w{k}_{j}'].shape[0] for k in range(1, i))
-                        dim1 = sum(module.split_weights[f'w{i}_{k}'].shape[1] for k in range(1, j))
-                        h, w = split_param.shape
-                        cropped = full_weight[dim0:dim0+h, dim1:dim1+w]
+                        if 'w_' in split_name: # layer norm
+                            i = int(split_name.replace('w_', ''))
+                            offset = sum(module.split_weights[f'w_{k}'].shape[0] for k in range(1, i))
+                            cropped = full_weight[offset:offset + split_param.shape[0]]
+                            split_param.copy_(cropped)
+                        else:
+                            i, j = map(int, split_name.replace('w', '').split('_'))
+                            dim0 = sum(module.split_weights[f'w{k}_{j}'].shape[0] for k in range(1, i))
+                            dim1 = sum(module.split_weights[f'w{i}_{k}'].shape[1] for k in range(1, j))
+                            h, w = split_param.shape
+                            cropped = full_weight[dim0:dim0+h, dim1:dim1+w]
                     # else:  # ex: w1
                     #     h, w = split_param.shape
                     #     cropped = full_weight[:h, :w]
@@ -73,6 +79,7 @@ def init_model_matryo_from_model(model, model_matryo):
                         else:
                             raise ValueError(f"Unsupported weight shape: {full_weight.shape}")
                         split_param.copy_(cropped)
+
 
                     else:
                         print(f"[⚠] Unknown split_name format: {split_name}")

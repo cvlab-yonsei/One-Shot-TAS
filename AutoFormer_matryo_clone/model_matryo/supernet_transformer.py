@@ -84,7 +84,7 @@ class Vision_TransformerSuper(nn.Module):
 
         # self.pos_drop = nn.Dropout(p=drop_rate)
         if self.pre_norm:
-            self.norm = LayerNormSuper(super_embed_dim=embed_dim)
+            self.norm = LayerNormSuper(super_embed_dim=embed_dim, choices=choices)
 
 
         # classifier head
@@ -92,14 +92,34 @@ class Vision_TransformerSuper(nn.Module):
 
         self.apply(self._init_weights)
 
+    # def _init_weights(self, m):
+    #     if isinstance(m, nn.Linear):
+    #         trunc_normal_(m.weight, std=.02)
+    #         if isinstance(m, nn.Linear) and m.bias is not None:
+    #             nn.init.constant_(m.bias, 0)
+    #     elif isinstance(m, nn.LayerNorm):
+    #         nn.init.constant_(m.bias, 0)
+    #         nn.init.constant_(m.weight, 1.0)
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
             trunc_normal_(m.weight, std=.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
+            if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
+
         elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
+            # LayerNormSuper는 제외하고 기본 LayerNorm만 초기화
+            if not isinstance(m, LayerNormSuper):
+                if m.weight is not None:
+                    nn.init.constant_(m.weight, 1.0)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+
+        elif isinstance(m, LayerNormSuper):
+            # LayerNormSuper의 split 파라미터 초기화
+            for w in m.split_weights.values():
+                nn.init.constant_(w, 1.0)
+            for b in m.split_bias.values():
+                nn.init.constant_(b, 0)
 
     # def _init_weights(self, m):
     #     def is_bias(name):
@@ -320,8 +340,8 @@ class TransformerEncoderLayer(nn.Module):
             max_relative_position=max_relative_position, choices=choices
         )
 
-        self.attn_layer_norm = LayerNormSuper(self.super_embed_dim)
-        self.ffn_layer_norm = LayerNormSuper(self.super_embed_dim)
+        self.attn_layer_norm = LayerNormSuper(self.super_embed_dim, choices=choices)
+        self.ffn_layer_norm = LayerNormSuper(self.super_embed_dim, choices=choices)
         # self.dropout = dropout
         self.activation_fn = gelu
         # self.normalize_before = args.encoder_normalize_before

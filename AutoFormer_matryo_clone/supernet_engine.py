@@ -17,7 +17,7 @@ import math
 
 def manual_lr_schedule(epoch, args):
     # 고정 시작 learning rate
-    start_lr = 3e-5
+    start_lr = 1e-4
     min_lr = args.min_lr         # 예: 1e-5
     total_epochs = args.epochs   # 예: 100
     half = total_epochs // 2     # 예: 50
@@ -140,7 +140,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     temp_optimizer = create_optimizer(args, [p for p in model.parameters() if p.requires_grad])
     lr_scheduler, _ = create_scheduler(args, temp_optimizer)   
 
-    curriculum_epoch = [-1, 0, 50]
+    curriculum_epoch = [-1, 0, 10]
     case_num = None
 
     if epoch in curriculum_epoch:
@@ -236,7 +236,7 @@ def evaluate(data_loader, model, device, amp=True, choices=None, mode='super', r
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Test:'
 
-    curriculum_epoch = [-1, 0, 50]
+    curriculum_epoch = [-1, 0, 10]
 
     # switch to evaluation mode
     model.eval()
