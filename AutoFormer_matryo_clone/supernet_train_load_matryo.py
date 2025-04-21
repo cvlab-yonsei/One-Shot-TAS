@@ -14,13 +14,12 @@ from timm.scheduler import create_scheduler
 from timm.optim import create_optimizer
 from timm.utils import NativeScaler
 from lib.datasets import build_dataset
-from supernet_engine import train_one_epoch, evaluate
+from supernet_engine_load_matryo import train_one_epoch, evaluate
 from lib.samplers import RASampler
 from lib import utils
 from lib.config import cfg, update_config_from_file
-from model.supernet_transformer import Vision_TransformerSuper
-from model_matryo.supernet_transformer import Vision_TransformerSuper as Vision_TransformerSuper_Matryo
-from weight_clone import init_model_matryo_from_model
+# from model.supernet_transformer import Vision_TransformerSuper
+from model_matryo.supernet_transformer import Vision_TransformerSuper
 
 import sys
 import warnings
@@ -54,8 +53,8 @@ def get_args_parser():
 
     parser.add_argument('--drop', type=float, default=0.0, metavar='PCT',
                         help='Dropout rate (default: 0.)')
-    parser.add_argument('--drop-path', type=float, default=0.0, metavar='PCT',
-                        help='Drop path rate (default: 0.1)') # 0.1 -> 0.0
+    parser.add_argument('--drop-path', type=float, default=0.1, metavar='PCT',
+                        help='Drop path rate (default: 0.1)')
     parser.add_argument('--drop-block', type=float, default=None, metavar='PCT',
                         help='Drop block rate (default: None)')
 
@@ -85,7 +84,7 @@ def get_args_parser():
     # Learning rate schedule parameters
     parser.add_argument('--sched', default='cosine', type=str, metavar='SCHEDULER',
                         help='LR scheduler (default: "cosine"')
-    parser.add_argument('--lr', type=float, default=5e-4, metavar='LR',
+    parser.add_argument('--lr', type=float, default=0.00001, metavar='LR', # 5e-4 -> 0.001
                         help='learning rate (default: 5e-4)')
     parser.add_argument('--lr-noise', type=float, nargs='+', default=None, metavar='pct, pct',
                         help='learning rate noise on/off epoch percentages')
@@ -93,16 +92,16 @@ def get_args_parser():
                         help='learning rate noise limit percent (default: 0.67)')
     parser.add_argument('--lr-noise-std', type=float, default=1.0, metavar='STDDEV',
                         help='learning rate noise std-dev (default: 1.0)')
-    parser.add_argument('--warmup-lr', type=float, default=1e-6, metavar='LR',
+    parser.add_argument('--warmup-lr', type=float, default=0.00001, metavar='LR', # 1e-6 -> 0.0001
                         help='warmup learning rate (default: 1e-6)')
-    parser.add_argument('--min-lr', type=float, default=1e-5, metavar='LR',
+    parser.add_argument('--min-lr', type=float, default=0.00001, metavar='LR', # 1e-5 -> 0.00001
                         help='lower lr bound for cyclic schedulers that hit 0 (1e-5)')
     parser.add_argument('--lr-power', type=float, default=1.0,
                         help='power of the polynomial lr scheduler')
 
     parser.add_argument('--decay-epochs', type=float, default=30, metavar='N',
                         help='epoch interval to decay LR')
-    parser.add_argument('--warmup-epochs', type=int, default=5, metavar='N',
+    parser.add_argument('--warmup-epochs', type=int, default=2, metavar='N', # 5 -> 2
                         help='epochs to warmup LR, if scheduler supports')
     parser.add_argument('--cooldown-epochs', type=int, default=10, metavar='N',
                         help='epochs to cooldown LR at min_lr, after cyclic schedule ends')
@@ -265,75 +264,27 @@ def main(args):
             prob=args.mixup_prob, switch_prob=args.mixup_switch_prob, mode=args.mixup_mode,
             label_smoothing=args.smoothing, num_classes=args.nb_classes)
 
+
+    choices = {'num_heads': cfg.SEARCH_SPACE.NUM_HEADS, 'mlp_ratio': cfg.SEARCH_SPACE.MLP_RATIO,
+               'embed_dim': cfg.SEARCH_SPACE.EMBED_DIM , 'depth': cfg.SEARCH_SPACE.DEPTH}
+
     print(f"Creating SuperVisionTransformer")
     print(cfg)
+    model = Vision_TransformerSuper(img_size=args.input_size,
+                                    patch_size=args.patch_size,
+                                    embed_dim=cfg.SUPERNET.EMBED_DIM, depth=cfg.SUPERNET.DEPTH,
+                                    num_heads=cfg.SUPERNET.NUM_HEADS,mlp_ratio=cfg.SUPERNET.MLP_RATIO,
+                                    qkv_bias=True, drop_rate=args.drop,
+                                    drop_path_rate=args.drop_path,
+                                    gp=args.gp,
+                                    num_classes=args.nb_classes,
+                                    max_relative_position=args.max_relative_position,
+                                    relative_position=args.relative_position,
+                                    change_qkv=args.change_qkv, abs_pos=not args.no_abs_pos,
+                                    choices=choices)
+
     
-    # 0. Matryo search space 설정
-    choices = {
-        'num_heads': cfg.SEARCH_SPACE.NUM_HEADS,
-        'mlp_ratio': cfg.SEARCH_SPACE.MLP_RATIO,
-        'embed_dim': cfg.SEARCH_SPACE.EMBED_DIM,
-        'depth': cfg.SEARCH_SPACE.DEPTH
-    }
-
-    # 1. 기존 SuperNet 모델 생성
-    model_super = Vision_TransformerSuper(
-        img_size=args.input_size,
-        patch_size=args.patch_size,
-        embed_dim=cfg.SUPERNET.EMBED_DIM,
-        depth=cfg.SUPERNET.DEPTH,
-        num_heads=cfg.SUPERNET.NUM_HEADS,
-        mlp_ratio=cfg.SUPERNET.MLP_RATIO,
-        qkv_bias=True,
-        drop_rate=args.drop,
-        drop_path_rate=args.drop_path,
-        gp=args.gp,
-        num_classes=args.nb_classes,
-        max_relative_position=args.max_relative_position,
-        relative_position=args.relative_position,
-        change_qkv=args.change_qkv,
-        abs_pos=not args.no_abs_pos
-    )
-    model_super.to(device)
-
-    # 2. checkpoint 로드
-    if args.resume:
-        if args.resume.startswith('https'):
-            checkpoint = torch.hub.load_state_dict_from_url(
-                args.resume, map_location='cpu', check_hash=True)
-        else:
-            checkpoint = torch.load(args.resume, map_location='cpu')
-        model_super.load_state_dict(checkpoint['model'])
-
-    # 3. Matryo 모델 생성
-    model_matryo = Vision_TransformerSuper_Matryo(
-        img_size=args.input_size,
-        patch_size=args.patch_size,
-        embed_dim=cfg.SUPERNET.EMBED_DIM,
-        depth=cfg.SUPERNET.DEPTH,
-        num_heads=cfg.SUPERNET.NUM_HEADS,
-        mlp_ratio=cfg.SUPERNET.MLP_RATIO,
-        qkv_bias=True,
-        drop_rate=args.drop,
-        drop_path_rate=args.drop_path,
-        gp=args.gp,
-        num_classes=args.nb_classes,
-        max_relative_position=args.max_relative_position,
-        relative_position=args.relative_position,
-        change_qkv=args.change_qkv,
-        abs_pos=not args.no_abs_pos,
-        choices=choices
-    )
-    model_matryo.to(device)
-
-    # 4. model_super → model_matryo 파라미터 이식
-    init_model_matryo_from_model(model_super, model_matryo)
-
-    # 5. model 변수 자체를 matryo로 바꾸기
-    model = model_matryo
     model.to(device)
-
-    # 6. Teacher 모델 설정
     if args.teacher_model:
         teacher_model = create_model(
             args.teacher_model,
@@ -346,62 +297,62 @@ def main(args):
         teacher_model = None
         teacher_loss = None
 
-    # 7. model_ema 설정
     model_ema = None
-    # if args.model_ema:
-    #     model_ema = ModelEma(model, decay=args.model_ema_decay)
 
-    # 8. DDP 설정
     model_without_ddp = model
     if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(
-            model, device_ids=[args.gpu], find_unused_parameters=True)
+
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module
 
-    # 9. Optimizer / Scheduler / Loss 정의
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
 
     linear_scaled_lr = args.lr * args.batch_size * utils.get_world_size() / 512.0
     args.lr = linear_scaled_lr
-
     optimizer = create_optimizer(args, model_without_ddp)
     loss_scaler = NativeScaler()
     lr_scheduler, _ = create_scheduler(args, optimizer)
 
+    # criterion = LabelSmoothingCrossEntropy()
+
     if args.mixup > 0.:
+        # smoothing is handled with mixup label transform
         criterion = SoftTargetCrossEntropy()
     elif args.smoothing:
         criterion = LabelSmoothingCrossEntropy(smoothing=args.smoothing)
     else:
         criterion = torch.nn.CrossEntropyLoss()
 
-    # 10. output dir 생성 및 config 저장
     output_dir = Path(args.output_dir)
+
     if not output_dir.exists():
         output_dir.mkdir(parents=True)
+    # save config for later experiments
     with open(output_dir / "config.yaml", 'w') as f:
         f.write(args_text)
-
-    # 11. checkpoint 이어서 학습 (optimizer 등 포함)
-    # if args.resume:
-    #     if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
-    #         optimizer.load_state_dict(checkpoint['optimizer'])
-    #         lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
-    #         args.start_epoch = checkpoint['epoch'] + 1
-    #         if 'scaler' in checkpoint:
-    #             loss_scaler.load_state_dict(checkpoint['scaler'])
-    #         if args.model_ema and 'model_ema' in checkpoint:
-    #             utils._load_checkpoint_for_ema(model_ema, checkpoint['model_ema'])
-
-    ######
+    if args.resume:
+        if args.resume.startswith('https'):
+            checkpoint = torch.hub.load_state_dict_from_url(
+                args.resume, map_location='cpu', check_hash=True)
+        else:
+            checkpoint = torch.load(args.resume, map_location='cpu')
+        model_without_ddp.load_state_dict(checkpoint['model'])
+        # if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
+        #     optimizer.load_state_dict(checkpoint['optimizer'])
+        #     lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
+        #     args.start_epoch = checkpoint['epoch'] + 1
+        #     if 'scaler' in checkpoint:
+        #         loss_scaler.load_state_dict(checkpoint['scaler'])
+        #     if args.model_ema:
+        #         utils._load_checkpoint_for_ema(model_ema, checkpoint['model_ema'])
 
     retrain_config = None
     if args.mode == 'retrain' and "RETRAIN" in cfg:
         retrain_config = {'layer_num': cfg.RETRAIN.DEPTH, 'embed_dim': [cfg.RETRAIN.EMBED_DIM]*cfg.RETRAIN.DEPTH,
                           'num_heads': cfg.RETRAIN.NUM_HEADS,'mlp_ratio': cfg.RETRAIN.MLP_RATIO}
     if args.eval:
-        test_stats = evaluate(data_loader_val, model, device,  mode = args.mode, retrain_config=retrain_config, epoch=epoch)
+        test_stats = evaluate(data_loader_val, model, device,  mode = args.mode, retrain_config=retrain_config)
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
         return
 
@@ -413,19 +364,19 @@ def main(args):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
 
-        train_stats, optimizer = train_one_epoch(
+        train_stats = train_one_epoch(
             model, criterion, data_loader_train,
             optimizer, device, epoch, loss_scaler,
             args.clip_grad, model_ema, mixup_fn,
             amp=args.amp, teacher_model=teacher_model,
             teach_loss=teacher_loss,
-            choices=choices, mode = args.mode, retrain_config=retrain_config, args=args
+            choices=choices, mode = args.mode, retrain_config=retrain_config,
         )
 
         lr_scheduler.step(epoch)
         if args.output_dir:
             # checkpoint_paths = [output_dir / 'checkpoint.pth']
-            checkpoint_paths = [output_dir / (args.save_checkpoint_path + str((epoch+1)//10) + '.pth')]
+            checkpoint_paths = [output_dir / (args.save_checkpoint_path + str((epoch+1)//20) + '.pth')]
             # checkpoint_paths = [output_dir / (args.save_checkpoint_path + str((epoch+1)) + '.pth')]
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({

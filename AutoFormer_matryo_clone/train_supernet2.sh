@@ -29,10 +29,15 @@
 # --min-param-limits 7 --param-limits 8 \
 # --log-file-path './log/search-checkpoint_original_check_only192_original_optimizer-epoch480-matryo-0-8M.log'
 
+# python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution.py --data-path '/dataset/ILSVRC2012' --gp \
+# --change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch480-matryo-lr-1e-4-cheet-1.pth' \
+# --min-param-limits 5 --param-limits 6 \
+# --log-file-path './log/search-checkpoint_original_check_only192_original_optimizer-epoch480-matryo-lr-1e-4-cheet-1-6M.log'
+
 python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution.py --data-path '/dataset/ILSVRC2012' --gp \
---change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch480-matryo-lr-1e-4-cheet-1.pth' \
+--change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch400-480-finetune-1e-5-22.pth' \
 --min-param-limits 5 --param-limits 6 \
---log-file-path './log/search-checkpoint_original_check_only192_original_optimizer-epoch480-matryo-lr-1e-4-cheet-1-6M.log'
+--log-file-path './log/search-checkpoint_original_check_only192_original_optimizer-epoch400-480-finetune-1e-5-22-6M.log'
 
 
 # python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution.py --data-path '/dataset/ILSVRC2012' --gp \

@@ -34,6 +34,38 @@ def sample_configs(choices):
     config['layer_num'] = depth
     return config
 
+def sample_configs_curriculum(choices, epoch=None, curriculum_epoch=None):
+    config = {}
+    dimensions = ['mlp_ratio', 'num_heads']
+    depth = random.choice(choices['depth'])
+    # depth = 12
+
+    if epoch is None:
+        config['embed_dim'] = [192] * depth
+        config['mlp_ratio'] = [3.5] * depth
+        config['num_heads'] = [3] * depth
+
+    elif epoch < curriculum_epoch[1]:
+        config['embed_dim'] = [192] * depth
+        config['mlp_ratio'] = [3.5] * depth
+        config['num_heads'] = [3] * depth
+        # config['embed_dim'] = [192] * depth
+        # config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 1])[0] for _ in range(depth)]
+        # config['num_heads'] = [random.choices([3, 4], weights=[1, 1])[0] for _ in range(depth)]
+
+    elif epoch >= curriculum_epoch[1] and epoch < curriculum_epoch[2]:
+        config['embed_dim'] = [216] * depth
+        config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 1])[0] for _ in range(depth)]
+        config['num_heads'] = [random.choices([3, 4], weights=[1, 1])[0] for _ in range(depth)]
+
+    else:
+        config['embed_dim'] = [240] * depth
+        config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 1])[0] for _ in range(depth)]
+        config['num_heads'] = [random.choices([3, 4], weights=[1, 1])[0] for _ in range(depth)]
+
+    config['layer_num'] = depth
+    return config
+
 def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, loss_scaler, max_norm: float = 0,
@@ -57,19 +89,29 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         model_module.set_sample_config(config=config)
         print(model_module.get_sampled_params_numel(config))
 
+
+    curriculum_epoch = [-1, -1, 0]
+    case_num = None
+
+    if epoch in curriculum_epoch:
+        case_num = curriculum_epoch.index(epoch) + 1
+
+    print("case_num : ", case_num)
+
     for samples, targets in metric_logger.log_every(data_loader, print_freq, header):
         samples = samples.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
 
         # sample random config
         if mode == 'super':
-            config = sample_configs(choices=choices)
+            # config = sample_configs(choices=choices)
+            config = sample_configs_curriculum(choices=choices, epoch=epoch, curriculum_epoch=curriculum_epoch) 
             model_module = unwrap_model(model)
-            model_module.set_sample_config(config=config)
+            model_module.set_sample_config(config=config, case_num=case_num)
 
-            current_lr = manual_lr_schedule(epoch)
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = current_lr
+            # current_lr = manual_lr_schedule(epoch)
+            # for param_group in optimizer.param_groups:
+            #     param_group['lr'] = current_lr
 
         elif mode == 'retrain':
             config = retrain_config
@@ -128,16 +170,19 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 @torch.no_grad()
-def evaluate(data_loader, model, device, amp=True, choices=None, mode='super', retrain_config=None):
+def evaluate(data_loader, model, device, amp=True, choices=None, mode='super', retrain_config=None, epoch=None):
     criterion = torch.nn.CrossEntropyLoss()
 
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Test:'
 
+    curriculum_epoch = [-1, -1, 0]
+
     # switch to evaluation mode
     model.eval()
     if mode == 'super':
-        config = sample_configs(choices=choices)
+        # config = sample_configs(choices=choices)
+        config = sample_configs_curriculum(choices=choices, epoch=epoch, curriculum_epoch=curriculum_epoch) 
         model_module = unwrap_model(model)
         model_module.set_sample_config(config=config)
     else:
