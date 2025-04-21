@@ -240,7 +240,7 @@ class Vision_TransformerSuper(nn.Module):
             else:
                 blocks.set_sample_config(is_identity_layer=True)
         if self.pre_norm:
-            self.norm.set_sample_config(self.sample_embed_dim[-1], self.sample_embed_dim_prev[-1] if self.sample_embed_dim_prev is not None else None)
+            self.norm.set_sample_config(self.sample_embed_dim[-1], self.sample_embed_dim_prev[-1] if self.sample_embed_dim_prev is not None else None, case_num=case_num)
         self.head.set_sample_config(self.sample_embed_dim[-1], self.num_classes, self.sample_embed_dim_prev[-1] if self.sample_embed_dim_prev is not None else None, self.num_classes, pretrained=pretrained, case_num=case_num)
 
     def get_sampled_params_numel(self, config):
@@ -398,7 +398,7 @@ class TransformerEncoderLayer(nn.Module):
             self.sample_ffn_embed_dim_this_layer_prev = int(embed_dim_val * mlp_ratio_val)
 
 
-        self.attn_layer_norm.set_sample_config(sample_embed_dim=self.sample_embed_dim, sample_embed_dim_prev=self.sample_embed_dim_prev)
+        self.attn_layer_norm.set_sample_config(sample_embed_dim=self.sample_embed_dim, sample_embed_dim_prev=self.sample_embed_dim_prev, case_num=case_num)
 
         self.attn.set_sample_config(sample_q_embed_dim=self.sample_num_heads_this_layer*64, sample_num_heads=self.sample_num_heads_this_layer, sample_in_embed_dim=self.sample_embed_dim,
                                     sample_q_embed_dim_prev=(self.sample_num_heads_prev * 64) if self.sample_num_heads_prev is not None else None, sample_num_heads_prev=self.sample_num_heads_prev, sample_in_embed_dim_prev=self.sample_embed_dim_prev, case_num=case_num)
@@ -408,7 +408,7 @@ class TransformerEncoderLayer(nn.Module):
         self.fc2.set_sample_config(sample_in_dim=self.sample_ffn_embed_dim_this_layer, sample_out_dim=self.sample_out_dim,
                                    sample_in_dim_prev=self.sample_ffn_embed_dim_this_layer_prev, sample_out_dim_prev=self.sample_out_dim_prev, pretrained=pretrained, case_num=case_num)
 
-        self.ffn_layer_norm.set_sample_config(sample_embed_dim=self.sample_embed_dim, sample_embed_dim_prev=self.sample_embed_dim_prev)
+        self.ffn_layer_norm.set_sample_config(sample_embed_dim=self.sample_embed_dim, sample_embed_dim_prev=self.sample_embed_dim_prev, case_num=case_num)
 
 
     def forward(self, x):

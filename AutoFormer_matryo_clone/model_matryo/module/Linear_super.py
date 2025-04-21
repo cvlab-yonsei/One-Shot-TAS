@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+import torch.nn.init as init
 
 from timm.models.layers import trunc_normal_
 
@@ -225,6 +226,25 @@ class LinearSuper(nn.Linear):
         total_flops += sequence_length *  np.prod(self.samples['weight'].size())
         return total_flops
 
+def init_split_parameters_with_gaussian(param_dict: nn.ParameterDict):
+    """
+    param_dict: nn.ParameterDict (e.g., split_weights or split_bias)
+    modifies in-place the parameters with requires_grad=True using the mean/std of the first param
+    """
+    if not param_dict:
+        return
+    
+    # 기준 파라미터: Dict의 첫 번째 entry
+    first_key = next(iter(param_dict))
+    reference_tensor = param_dict[first_key].detach()
+    ref_mean = reference_tensor.mean().item()
+    ref_std = reference_tensor.std(unbiased=False).item() + 1e-8  # std 0 방지
+
+    for key, param in param_dict.items():
+        if param.requires_grad:
+            with torch.no_grad():
+                init.normal_(param, mean=ref_mean, std=ref_std)
+
 # 수정된 sample_weight 함수로, 주어진 법칙대로 requires_grad를 설정함
 
 def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, sample_out_dim_prev=None, pretrained=False, case_num=None):
@@ -307,6 +327,8 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
                     elif name == 'fc2':
                         self.split_weights[key].requires_grad = ((j + 1, i + 1) in true_label)
 
+            init_split_parameters_with_gaussian(self.split_weights)
+
         elif name == 'head':
             embed_dims = sorted(set(choices['embed_dim']))
             dim1_splits = embed_dims + [self.super_in_dim]
@@ -321,6 +343,9 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
             for j in range(len(dim1_splits)):
                 key = f'w1_{j+1}'
                 self.split_weights[key].requires_grad = ((j + 1) in true_label)
+
+            if case_num is not None:
+                init_split_parameters_with_gaussian(self.split_weights)
 
         elif name == 'qkv':
             embed_dims = sorted(set(choices['embed_dim']))
@@ -342,6 +367,8 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
                     key = f'w{i+1}_{j+1}'
                     self.split_weights[key].requires_grad = ((i + 1, j + 1) in true_label)
 
+            if case_num is not None:
+                init_split_parameters_with_gaussian(self.split_weights)
 
             # i_active = next(i for i, val in enumerate(dim0_splits) if val >= sample_out_dim)
             # j_active = next(j for j, val in enumerate(dim1_splits) if val >= sample_in_dim)
@@ -371,6 +398,8 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
                     key = f'w{i+1}_{j+1}'
                     self.split_weights[key].requires_grad = ((i + 1, j + 1) in true_label)
 
+            if case_num is not None:
+                init_split_parameters_with_gaussian(self.split_weights)
 
             # i_active = next(i for i, val in enumerate(dim0_splits) if val >= sample_out_dim)
             # j_active = next(j for j, val in enumerate(dim1_splits) if val >= sample_in_dim)
@@ -445,6 +474,9 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
                 self.split_bias[key].requires_grad = ((i + 1) in true_label)
             collected_bias.append(self.split_bias[key])
 
+        if case_num is not None:
+            init_split_parameters_with_gaussian(self.split_bias)
+
         full_bias = torch.cat(collected_bias, dim=0)
         sample_bias = full_bias[:sample_out_dim]
 
@@ -482,6 +514,9 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
             self.split_bias[key].requires_grad = (i == i_active)
             collected_bias.append(self.split_bias[key])
 
+        if case_num is not None:
+            init_split_parameters_with_gaussian(self.split_bias)
+
         # print(f"\n[🔍 {self.name} - Bias requires_grad status]")
         # for key in self.split_bias:
         #     print(f"  {key:10s} -> {self.split_bias[key].requires_grad}")
@@ -500,6 +535,9 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
             key = f'bias_{i+1}'
             self.split_bias[key].requires_grad = (i == i_active)
             collected_bias.append(self.split_bias[key])
+
+        if case_num is not None:
+            init_split_parameters_with_gaussian(self.split_bias)
         
         # print(f"\n[🔍 {self.name} - Bias requires_grad status]")
         # for key in self.split_bias:

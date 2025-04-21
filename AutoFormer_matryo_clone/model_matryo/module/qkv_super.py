@@ -3,6 +3,26 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from timm.models.layers import trunc_normal_
+import torch.nn.init as init
+
+def init_split_parameters_with_gaussian(param_dict: nn.ParameterDict):
+    """
+    param_dict: nn.ParameterDict (e.g., split_weights or split_bias)
+    modifies in-place the parameters with requires_grad=True using the mean/std of the first param
+    """
+    if not param_dict:
+        return
+    
+    # 기준 파라미터: Dict의 첫 번째 entry
+    first_key = next(iter(param_dict))
+    reference_tensor = param_dict[first_key].detach()
+    ref_mean = reference_tensor.mean().item()
+    ref_std = reference_tensor.std(unbiased=False).item() + 1e-8  # std 0 방지
+
+    for key, param in param_dict.items():
+        if param.requires_grad:
+            with torch.no_grad():
+                init.normal_(param, mean=ref_mean, std=ref_std)
 
 
 class qkv_super(nn.Linear):
@@ -137,6 +157,9 @@ def sample_weight(split_weights, sample_in_dim, sample_out_dim, sample_in_dim_pr
                 key = f'w{i+1}_{j+1}'
                 split_weights[key].requires_grad = ((i + 1, j + 1) in true_label)
 
+        if case_num is not None:
+            init_split_parameters_with_gaussian(split_weights)
+
     row_blocks = []
     for i in range(len(dim0_splits)):
         col_blocks = []
@@ -172,6 +195,9 @@ def sample_bias(split_bias, sample_out_dim, sample_out_dim_prev, dim0_splits, ca
 
         for i in range(len(dim0_splits)):
             split_bias[f'bias_{i+1}'].requires_grad = ((i + 1) in true_label)
+
+        if case_num is not None:
+            init_split_parameters_with_gaussian(split_bias)
 
 
     full_bias = torch.cat([split_bias[f'bias_{i+1}'] for i in range(len(dim0_splits))], dim=0)

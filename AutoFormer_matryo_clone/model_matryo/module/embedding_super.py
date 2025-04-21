@@ -4,7 +4,26 @@ import torch.nn.functional as F
 from model.utils import to_2tuple
 import numpy as np
 from collections import OrderedDict
+import torch.nn.init as init
 
+def init_split_parameters_with_gaussian(param_dict: nn.ParameterDict):
+    """
+    param_dict: nn.ParameterDict (e.g., split_weights or split_bias)
+    modifies in-place the parameters with requires_grad=True using the mean/std of the first param
+    """
+    if not param_dict:
+        return
+    
+    # 기준 파라미터: Dict의 첫 번째 entry
+    first_key = next(iter(param_dict))
+    reference_tensor = param_dict[first_key].detach()
+    ref_mean = reference_tensor.mean().item()
+    ref_std = reference_tensor.std(unbiased=False).item() + 1e-8  # std 0 방지
+
+    for key, param in param_dict.items():
+        if param.requires_grad:
+            with torch.no_grad():
+                init.normal_(param, mean=ref_mean, std=ref_std)
 
 class PatchembedConvSuper(nn.Conv2d):
     def __init__(self, in_chans, super_embed_dim, patch_size, choices):
@@ -54,6 +73,12 @@ class PatchembedConvSuper(nn.Conv2d):
             for i in range(len(self.dim0_splits)):
                 self.split_weights[f'w{i+1}'].requires_grad = ((i + 1) in true_label)
                 self.split_biases[f'b{i+1}'].requires_grad = ((i + 1) in true_label)
+
+            if case_num is not None:
+                init_split_parameters_with_gaussian(self.split_weights)
+
+            if case_num is not None:
+                init_split_parameters_with_gaussian(self.split_biases)
 
         weights = [self.split_weights[f'w{i+1}'] for i in range(j_end + 1)]
         biases = [self.split_biases[f'b{i+1}'] for i in range(j_end + 1)]
