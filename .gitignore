@@ -24,3 +24,4 @@ AutoFormer/autoformer3.6
 config.txt
 AutoFormer/greedyTAS/autoformer-greedyTAS-09121607-greedy.log
 AutoFormer/greedyTAS/autoformer-greedyTAS(09121607)-greedy.log
+*.png

@@ -182,7 +182,8 @@ def evaluate(data_loader, model, device, amp=True, choices=None, mode='super', r
     model.eval()
     if mode == 'super':
         # config = sample_configs(choices=choices)
-        config = sample_configs_curriculum(choices=choices, epoch=epoch, curriculum_epoch=curriculum_epoch) 
+        # config = sample_configs_curriculum(choices=choices, epoch=epoch, curriculum_epoch=curriculum_epoch) 
+        config = {'layer_num': 14, 'mlp_ratio': [4.0, 4.0, 3.5, 4.0, 3.5, 3.5, 3.5, 3.5, 4.0, 4.0, 3.5, 3.5, 3.5, 3.5], 'num_heads': [3, 3, 4, 4, 3, 3, 4, 4, 4, 4, 4, 3, 4, 3], 'embed_dim': [240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240]}
         model_module = unwrap_model(model)
         model_module.set_sample_config(config=config)
     else:

@@ -14,7 +14,7 @@ from timm.scheduler import create_scheduler
 from timm.optim import create_optimizer
 from timm.utils import NativeScaler
 from lib.datasets import build_dataset
-from supernet_engine_load_matryo import train_one_epoch, evaluate
+from AutoFormer_matryo_clone.supernet_engine_load_matryo_240 import train_one_epoch, evaluate
 from lib.samplers import RASampler
 from lib import utils
 from lib.config import cfg, update_config_from_file
@@ -84,7 +84,7 @@ def get_args_parser():
     # Learning rate schedule parameters
     parser.add_argument('--sched', default='cosine', type=str, metavar='SCHEDULER',
                         help='LR scheduler (default: "cosine"')
-    parser.add_argument('--lr', type=float, default=0.00001, metavar='LR', # 5e-4 -> 0.001
+    parser.add_argument('--lr', type=float, default=0.0001, metavar='LR', # 5e-4 -> 0.001
                         help='learning rate (default: 5e-4)')
     parser.add_argument('--lr-noise', type=float, nargs='+', default=None, metavar='pct, pct',
                         help='learning rate noise on/off epoch percentages')
@@ -92,7 +92,7 @@ def get_args_parser():
                         help='learning rate noise limit percent (default: 0.67)')
     parser.add_argument('--lr-noise-std', type=float, default=1.0, metavar='STDDEV',
                         help='learning rate noise std-dev (default: 1.0)')
-    parser.add_argument('--warmup-lr', type=float, default=0.00001, metavar='LR', # 1e-6 -> 0.0001
+    parser.add_argument('--warmup-lr', type=float, default=0.0001, metavar='LR', # 1e-6 -> 0.0001
                         help='warmup learning rate (default: 1e-6)')
     parser.add_argument('--min-lr', type=float, default=0.00001, metavar='LR', # 1e-5 -> 0.00001
                         help='lower lr bound for cyclic schedulers that hit 0 (1e-5)')
@@ -376,7 +376,7 @@ def main(args):
         lr_scheduler.step(epoch)
         if args.output_dir:
             # checkpoint_paths = [output_dir / 'checkpoint.pth']
-            checkpoint_paths = [output_dir / (args.save_checkpoint_path + str((epoch+1)//20) + '.pth')]
+            checkpoint_paths = [output_dir / (args.save_checkpoint_path + str((epoch+1)//10) + '.pth')]
             # checkpoint_paths = [output_dir / (args.save_checkpoint_path + str((epoch+1)) + '.pth')]
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({
