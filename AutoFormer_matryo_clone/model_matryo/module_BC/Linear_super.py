@@ -311,7 +311,11 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
             if case_num == 1:
                 true_label = [(1, 1), (2, 1), (3, 1)]
             elif case_num == 2:
-                true_label = [(1, 2), (2, 2), (3, 2), (4, 1), (4, 2), (5, 1), (5, 2)]
+                # true_label = [(1, 2), (2, 2), (3, 2), (4, 1), (4, 2), (5, 1), (5, 2)]
+                true_label = [(1, 2), (2, 2), (3, 2), (4, 1), (4, 2), (5, 1), (5, 2),
+                              (1, 3), (2, 3), (3, 3),
+                    (4, 3), (5, 3),
+                    (6, 1), (6, 2), (6, 3)]
             elif case_num == 3:
                 true_label = [
                     (1, 3), (2, 3), (3, 3),
@@ -336,7 +340,8 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
             if case_num == 1:
                 true_label = [(1)]
             elif case_num == 2:
-                true_label = [(2)]
+                # true_label = [(2)]
+                true_label = [(2), (3)]
             elif case_num == 3:
                 true_label = [(3)]
 
@@ -355,7 +360,10 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
             if case_num == 1:
                 true_label = [(1, 1)]
             elif case_num == 2:
-                true_label = [(1, 2), (2, 1), (2, 2)]
+                # true_label = [(1, 2), (2, 1), (2, 2)]
+                true_label = [(1, 2), (2, 1), (2, 2),
+                              (1, 3), (2, 3), (3, 3),
+                    (3, 1), (3, 2)]
             elif case_num == 3:
                 true_label = [
                     (1, 3), (2, 3), (3, 3),
@@ -386,7 +394,10 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
             if case_num == 1:
                 true_label = [(1, 1)]
             elif case_num == 2:
-                true_label = [(1, 2), (2, 1), (2, 2)]
+                # true_label = [(1, 2), (2, 1), (2, 2)]
+                true_label = [(1, 2), (2, 1), (2, 2),
+                              (1, 3), (2, 3), (3, 3),
+                    (3, 1), (3, 2)]
             elif case_num == 3:
                 true_label = [
                     (1, 3), (2, 3), (3, 3),
@@ -463,7 +474,8 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
                 if case_num == 1:
                     true_label = [(1)]
                 elif case_num == 2:
-                    true_label = [(2)]
+                    # true_label = [(2)]
+                    true_label = [(2), (3)]
                 elif case_num == 3:
                     true_label = [(3)]
 
@@ -507,13 +519,22 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
         embed_dims = sorted(set(choices['embed_dim']))
         dim0_sizes = [3 * e for e in embed_dims] + [self.super_out_dim]
 
-        i_active = next(i for i, val in enumerate(dim0_sizes) if val >= sample_out_dim)
-
         collected_bias = []
-        for i in range(len(dim0_sizes)):
+        for i, dim in enumerate(dim0_sizes):
             key = f'bias_{i+1}'
-            self.split_bias[key].requires_grad = (i == i_active)
+            # active = (dim >= sample_out_dim)
+            active = (dim >= dim0_sizes[1]) # 이거 dim0_sizes[1]로 하드코딩
+            self.split_bias[key].requires_grad = active
             collected_bias.append(self.split_bias[key])
+
+
+        # i_active = next(i for i, val in enumerate(dim0_sizes) if val >= sample_out_dim)
+
+        # collected_bias = []
+        # for i in range(len(dim0_sizes)):
+        #     key = f'bias_{i+1}'
+        #     self.split_bias[key].requires_grad = (i == i_active)
+        #     collected_bias.append(self.split_bias[key])
 
         # if case_num is not None:
         #     init_split_parameters_with_gaussian(self.split_bias)
@@ -529,13 +550,22 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
         embed_dims = sorted(set(choices['embed_dim']))
         dim0_sizes = embed_dims + [self.super_out_dim]
 
-        i_active = next(i for i, val in enumerate(dim0_sizes) if val >= sample_out_dim)
-
         collected_bias = []
-        for i in range(len(dim0_sizes)):
+        for i, dim in enumerate(dim0_sizes):
             key = f'bias_{i+1}'
-            self.split_bias[key].requires_grad = (i == i_active)
+            # active = (dim >= sample_out_dim)
+            active = (dim >= dim0_sizes[1]) # 이거 dim0_sizes[1]로 하드코딩
+            self.split_bias[key].requires_grad = active
             collected_bias.append(self.split_bias[key])
+
+
+        # i_active = next(i for i, val in enumerate(dim0_sizes) if val >= sample_out_dim)
+
+        # collected_bias = []
+        # for i in range(len(dim0_sizes)):
+        #     key = f'bias_{i+1}'
+        #     self.split_bias[key].requires_grad = (i == i_active)
+        #     collected_bias.append(self.split_bias[key])
 
         # if case_num is not None:
         #     init_split_parameters_with_gaussian(self.split_bias)

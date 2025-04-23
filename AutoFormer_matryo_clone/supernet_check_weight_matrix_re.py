@@ -35,12 +35,19 @@ model = Vision_TransformerSuper_Matryo(img_size=224,
                                     )
 
 # ==== 2. 체크포인트 로드 ====
-ckpt_path = '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch480-matryo_load_matryo_216-0.pth'
+# ckpt_path = '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch480-matryo_load_matryo_216-0.pth'
+# ckpt_path = '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch480-matryo_load_matryo_216_reinit-0.pth'
+# ckpt_path = '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch480-matryo_load_matryo_216_param-fc-gaus-no-share-0.pth'
+ckpt_path = '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch480-matryo_load_matryo_216_param-fc-wb-gaus-no-share-1e-4-decay005-0.pth'
+
+
+
+
 ckpt = torch.load(ckpt_path, map_location='cpu')
 model.load_state_dict(ckpt['model'], strict=False)
 
 # ==== 3. 저장 경로 설정 ====
-output_dir = './layer_weight_heatmaps/supernet-checkpoint_original_check_only192_original_optimizer-epoch480-matryo_load_matryo_216-0'
+output_dir = './layer_weight_heatmaps/supernet-checkpoint_original_check_only192_original_optimizer-epoch480-matryo_load_matryo_216_param-fc-wb-gaus-no-share-1e-4-decay005-0'
 os.makedirs(output_dir, exist_ok=True)
 
 # ==== 4. 시각화 함수 ====

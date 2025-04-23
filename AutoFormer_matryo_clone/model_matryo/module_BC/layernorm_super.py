@@ -64,14 +64,22 @@ class LayerNormSuper(nn.LayerNorm):
         embed_dims = sorted(set(choices['embed_dim']))
         dim0_sizes = embed_dims + [self.super_embed_dim]
 
-        i_active = next(i for i, val in enumerate(dim0_sizes) if val >= sample_embed_dim)
+        # 활성화 대상: sample_embed_dim 이상인 것들 전부
+        for i, dim in enumerate(dim0_sizes):
+            # active = (dim >= sample_embed_dim) # 이거 embed_dims[1]로 하드코딩
+            active = (dim >= embed_dims[1]) # 이거 embed_dims[1]로 하드코딩
+            self.split_bias[f'bias_{i+1}'].requires_grad = active
+            self.split_weights[f'w_{i+1}'].requires_grad = active
 
-        for i in range(len(dim0_sizes)):
-            key = f'bias_{i+1}'
-            self.split_bias[key].requires_grad = (i == i_active)
 
-            key2 = f'w_{i+1}'
-            self.split_weights[key2].requires_grad = (i == i_active)
+        # i_active = next(i for i, val in enumerate(dim0_sizes) if val >= sample_embed_dim)
+
+        # for i in range(len(dim0_sizes)):
+        #     key = f'bias_{i+1}'
+        #     self.split_bias[key].requires_grad = (i == i_active)
+
+        #     key2 = f'w_{i+1}'
+        #     self.split_weights[key2].requires_grad = (i == i_active)
 
         # if case_num is not None:
         #     init_split_parameters_with_gaussian(self.split_weights)

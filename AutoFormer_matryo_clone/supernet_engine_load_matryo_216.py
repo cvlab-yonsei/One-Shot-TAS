@@ -4,18 +4,35 @@ from typing import Iterable, Optional
 from timm.utils.model import unwrap_model
 import torch
 
+from timm.scheduler import create_scheduler
+from timm.optim import create_optimizer
+
 from timm.data import Mixup
 from timm.utils import accuracy, ModelEma
 from lib import utils
 import random
 import time
 
-def manual_lr_schedule(epoch, start_epoch=400, total_epochs=80, start_lr=1e-5, min_lr=1e-6):
+# def manual_lr_schedule(epoch, start_epoch=400, total_epochs=80, start_lr=1e-5, min_lr=1e-6):
+#     effective_epoch = epoch - start_epoch
+#     if effective_epoch < 0 or effective_epoch >= total_epochs:
+#         raise ValueError(f"Epoch {epoch} out of fine-tuning range ({start_epoch} ~ {start_epoch + total_epochs - 1})")
+
+#     # Cosine decay 계산
+#     cosine_decay = 0.5 * (1 + math.cos(math.pi * effective_epoch / (total_epochs - 1)))
+#     current_lr = min_lr + (start_lr - min_lr) * cosine_decay
+#     return current_lr
+
+def manual_lr_schedule(epoch):
+    start_epoch = 0
+    total_epochs = 40
+    start_lr = 2e-4  # 0.0002 -> 0.0005
+    min_lr = 1e-5   # 0.00001
+
     effective_epoch = epoch - start_epoch
     if effective_epoch < 0 or effective_epoch >= total_epochs:
-        raise ValueError(f"Epoch {epoch} out of fine-tuning range ({start_epoch} ~ {start_epoch + total_epochs - 1})")
+        raise ValueError(f"Epoch {epoch} out of range ({start_epoch} ~ {start_epoch + total_epochs - 1})")
 
-    # Cosine decay 계산
     cosine_decay = 0.5 * (1 + math.cos(math.pi * effective_epoch / (total_epochs - 1)))
     current_lr = min_lr + (start_lr - min_lr) * cosine_decay
     return current_lr
@@ -54,7 +71,9 @@ def sample_configs_curriculum(choices, epoch=None, curriculum_epoch=None):
         # config['num_heads'] = [random.choices([3, 4], weights=[1, 1])[0] for _ in range(depth)]
 
     elif epoch >= curriculum_epoch[1] and epoch < curriculum_epoch[2]:
-        config['embed_dim'] = [216] * depth
+        # config['embed_dim'] = [216] * depth
+        embed_dim_choice = random.choice([216, 240])
+        config['embed_dim'] = [embed_dim_choice] * depth
         config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 1])[0] for _ in range(depth)]
         config['num_heads'] = [random.choices([3, 4], weights=[1, 1])[0] for _ in range(depth)]
 
@@ -71,7 +90,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     device: torch.device, epoch: int, loss_scaler, max_norm: float = 0,
                     model_ema: Optional[ModelEma] = None, mixup_fn: Optional[Mixup] = None,
                     amp: bool = True, teacher_model: torch.nn.Module = None,
-                    teach_loss: torch.nn.Module = None, choices=None, mode='super', retrain_config=None):
+                    teach_loss: torch.nn.Module = None, choices=None, mode='super', retrain_config=None, args=None):
     model.train()
     criterion.train()
 
@@ -90,13 +109,34 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         print(model_module.get_sampled_params_numel(config))
 
 
-    curriculum_epoch = [-1, 0, 21]
+    
+    # curriculum_epoch = [-1, 0, 21]
+    curriculum_epoch = [-1, 0, 41]
     case_num = None
+    # case_num = 2 # 이거 괜찮나?
 
     if epoch in curriculum_epoch:
         case_num = curriculum_epoch.index(epoch) + 1
 
     print("case_num : ", case_num)
+
+    # # 2. requires_grad=True인 파라미터들만 모아서 확인
+    # trainable_params = []
+    # print("[Trainable Parameters]")
+    # for name, param in model.named_parameters():
+    #     if param.requires_grad:
+    #         print(f"  ✅ {name}, shape: {param.shape}")
+    #         trainable_params.append(param)
+
+    # print(f"\nTotal trainable param groups: {len(trainable_params)}")
+
+    # if case_num is None:
+    #     # 3. 해당 param만 optimize 되도록 optimizer 생성
+    #     optimizer = create_optimizer(args, trainable_params)
+    # else:
+    #     # 최종 optimizer 먼저 생성
+    #     optimizer = create_optimizer(args, [p for p in model.parameters() if p.requires_grad])
+
 
     for samples, targets in metric_logger.log_every(data_loader, print_freq, header):
         samples = samples.to(device, non_blocking=True)
@@ -108,6 +148,10 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             config = sample_configs_curriculum(choices=choices, epoch=epoch, curriculum_epoch=curriculum_epoch) 
             model_module = unwrap_model(model)
             model_module.set_sample_config(config=config, case_num=case_num)
+
+            current_lr = manual_lr_schedule(epoch)
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = current_lr
 
             # current_lr = manual_lr_schedule(epoch)
             # for param_group in optimizer.param_groups:
@@ -176,14 +220,31 @@ def evaluate(data_loader, model, device, amp=True, choices=None, mode='super', r
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Test:'
 
-    curriculum_epoch = [-1, 0, 21]
+    # curriculum_epoch = [-1, 0, 21]
+    curriculum_epoch = [-1, 0, 41]
 
     # switch to evaluation mode
     model.eval()
     if mode == 'super':
         # config = sample_configs(choices=choices)
         # config = sample_configs_curriculum(choices=choices, epoch=epoch, curriculum_epoch=curriculum_epoch) 
-        config = {'layer_num': 13, 'mlp_ratio': [4.0, 3.5, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 3.5, 3.5, 4.0, 3.5, 3.5], 'num_heads': [4, 3, 4, 3, 3, 4, 4, 3, 4, 4, 4, 3, 4], 'embed_dim': [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216]}
+        # config = {'layer_num': 13, 'mlp_ratio': [4.0, 3.5, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 3.5, 3.5, 4.0, 3.5, 3.5], 'num_heads': [4, 3, 4, 3, 3, 4, 4, 3, 4, 4, 4, 3, 4], 'embed_dim': [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216]}
+        # config = {'layer_num': 14, 'mlp_ratio': [4.0, 4.0, 3.5, 4.0, 3.5, 3.5, 3.5, 3.5, 4.0, 4.0, 3.5, 3.5, 3.5, 3.5], 'num_heads': [3, 3, 4, 4, 3, 3, 4, 4, 4, 4, 4, 3, 4, 3], 'embed_dim': [240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240]}
+        if epoch % 2 == 1:
+            config = {
+                'layer_num': 13,
+                'mlp_ratio': [4.0, 3.5, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 3.5, 3.5, 4.0, 3.5, 3.5],
+                'num_heads': [4, 3, 4, 3, 3, 4, 4, 3, 4, 4, 4, 3, 4],
+                'embed_dim': [216] * 13
+            }
+        else:
+            config = {
+                'layer_num': 14,
+                'mlp_ratio': [4.0, 4.0, 3.5, 4.0, 3.5, 3.5, 3.5, 3.5, 4.0, 4.0, 3.5, 3.5, 3.5, 3.5],
+                'num_heads': [3, 3, 4, 4, 3, 3, 4, 4, 4, 4, 4, 3, 4, 3],
+                'embed_dim': [240] * 14
+            }
+
         model_module = unwrap_model(model)
         model_module.set_sample_config(config=config)
     else:

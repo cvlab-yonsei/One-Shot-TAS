@@ -66,7 +66,8 @@ class PatchembedConvSuper(nn.Conv2d):
             if case_num == 1:
                 true_label = [(1)]
             elif case_num == 2:
-                true_label = [(2)]
+                # true_label = [(2)]
+                true_label = [(2, 3)]
             elif case_num == 3:
                 true_label = [(3)]
 

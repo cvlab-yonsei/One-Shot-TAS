@@ -14,7 +14,7 @@ from timm.scheduler import create_scheduler
 from timm.optim import create_optimizer
 from timm.utils import NativeScaler
 from lib.datasets import build_dataset
-from AutoFormer_matryo_clone.supernet_engine_load_matryo_240 import train_one_epoch, evaluate
+from supernet_engine_load_matryo_240 import train_one_epoch, evaluate
 from lib.samplers import RASampler
 from lib import utils
 from lib.config import cfg, update_config_from_file
@@ -78,7 +78,7 @@ def get_args_parser():
                         help='Clip gradient norm (default: None, no clipping)')
     parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
                         help='SGD momentum (default: 0.9)')
-    parser.add_argument('--weight-decay', type=float, default=0.05,
+    parser.add_argument('--weight-decay', type=float, default=0.001, # 0.05 0> 0.001
                         help='weight decay (default: 0.05)')
 
     # Learning rate schedule parameters

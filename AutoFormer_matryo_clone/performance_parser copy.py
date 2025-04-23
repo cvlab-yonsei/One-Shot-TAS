@@ -96,7 +96,7 @@ def parse_evolution_log(file_path):
 # file_path = "./greedyTAS/greedyTAS-epoch60/autoformer-greedyTAS(09131747).log"
 
 # file_path = "./greedyTAS/greedyTAS-epoch20-test/autoformer-greedyTAS(dss)-20epoch-subnet.log"
-file_path = "./log/search-checkpoint_original_check_only192-no-share-2e-4-decay0001-BC-4-10M.log"
+file_path = "./log/search-original_tiny-epoch400-25-6M.log"
 
 results = parse_evolution_log(file_path)
 print(len(results))  # 결과 출력
@@ -129,7 +129,7 @@ print(results_no_duplicates[-1])
 # print(results_with_inter_loss[-1])
 
 # Save the transformed data to a new pickle file
-with open('./log/search-checkpoint_original_check_only192-no-share-2e-4-decay0001-BC-4-10M.pkl', 'wb') as file:
+with open('./log/search-original_tiny-epoch400-25-6M.pkl', 'wb') as file:
     pickle.dump(results_no_duplicates, file)
 
 print("Data saved successfully.")
