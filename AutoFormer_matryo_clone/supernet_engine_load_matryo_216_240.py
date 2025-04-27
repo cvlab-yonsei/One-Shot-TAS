@@ -3,6 +3,7 @@ import sys
 from typing import Iterable, Optional
 from timm.utils.model import unwrap_model
 import torch
+import torch.nn as nn
 
 from timm.scheduler import create_scheduler
 from timm.optim import create_optimizer
@@ -25,7 +26,7 @@ import time
 
 def manual_lr_schedule(epoch):
     start_epoch = 0
-    total_epochs = 20
+    total_epochs = 40
     start_lr = 2e-4  # 0.0002 -> 0.0005
     min_lr = 1e-5   # 0.00001
 
@@ -71,9 +72,9 @@ def sample_configs_curriculum(choices, epoch=None, curriculum_epoch=None):
         # config['num_heads'] = [random.choices([3, 4], weights=[1, 1])[0] for _ in range(depth)]
 
     elif epoch >= curriculum_epoch[1] and epoch < curriculum_epoch[2]:
-        config['embed_dim'] = [216] * depth
-        # embed_dim_choice = random.choice([216, 240])
-        # config['embed_dim'] = [embed_dim_choice] * depth
+        # config['embed_dim'] = [216] * depth
+        embed_dim_choice = random.choice([216, 240])
+        config['embed_dim'] = [embed_dim_choice] * depth
         config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 1])[0] for _ in range(depth)]
         config['num_heads'] = [random.choices([3, 4], weights=[1, 1])[0] for _ in range(depth)]
 
@@ -110,42 +111,37 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
 
     
-    curriculum_epoch = [-1, 0, 21]
-    # curriculum_epoch = [-1, 0, 41]
+    # curriculum_epoch = [-1, 0, 21]
+    curriculum_epoch = [-1, 0, 41]
     case_num = None
     # case_num = 2 # 이거 괜찮나?
 
     if epoch in curriculum_epoch:
         case_num = curriculum_epoch.index(epoch) + 1
 
-        config = sample_configs_curriculum(choices=choices, epoch=epoch, curriculum_epoch=curriculum_epoch) 
-        model_module = unwrap_model(model)
-        model_module.set_sample_config(config=config, case_num=case_num)
+        # config = sample_configs_curriculum(choices=choices, epoch=epoch, curriculum_epoch=curriculum_epoch) 
+        # model_module = unwrap_model(model)
+        # model_module.set_sample_config(config=config, case_num=case_num)
 
-        # (2) 큰 learning rate를 적용할 그룹과 작은 learning rate를 적용할 그룹 분리
-        large_lr_params = []
-        small_lr_params = []
+        # # (2) 큰 learning rate를 적용할 그룹과 작은 learning rate를 적용할 그룹 분리
+        # large_lr_params = []
+        # small_lr_params = []
 
-        for name, param in model.named_parameters():
-            # 💡 self.weight, self.bias는 제외
-            if name.endswith("weight") or name.endswith("bias"):
-                continue  # 완전 제외, requires_grad 유지
+        # for name, param in model.named_parameters():
+        #     # 💡 self.weight, self.bias는 제외
+        #     if name.endswith("weight") or name.endswith("bias"):
+        #         continue  # 완전 제외, requires_grad 유지
 
-            if param.requires_grad:
-                large_lr_params.append(param)  # 원래 학습 중인 파라미터
-            else:
-                param.requires_grad = True    # soft freeze 대상만 학습 가능하게 바꾸고
-                small_lr_params.append(param) # 작은 lr로 학습
+        #     if param.requires_grad:
+        #         large_lr_params.append(param)  # 원래 학습 중인 파라미터
+        #     else:
+        #         param.requires_grad = True    # soft freeze 대상만 학습 가능하게 바꾸고
+        #         small_lr_params.append(param) # 작은 lr로 학습
 
         # optimizer = torch.optim.AdamW([
         #     {'params': large_lr_params, 'lr': args.lr, 'weight_decay': args.weight_decay},           # 일반 학습
         #     {'params': small_lr_params, 'lr': args.lr * 0.1, 'weight_decay': args.weight_decay * 0.1} # soft freeze
         # ])
-
-        optimizer = torch.optim.AdamW([
-            {'params': large_lr_params, 'lr': args.lr, 'weight_decay': args.weight_decay},           # 일반 학습
-            {'params': small_lr_params, 'lr': args.lr * 0.1, 'weight_decay': args.weight_decay} # soft freeze
-        ])
 
 
     print("case_num : ", case_num)
@@ -179,8 +175,11 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             model_module = unwrap_model(model)
             model_module.set_sample_config(config=config, case_num=case_num)
 
-            for name, param in model.named_parameters():
-                param.requires_grad = True
+            if case_num is not None:
+                case_num = None # None이 아닐때마다 gaussian init해주는거라 그거 방지.
+
+            # for name, param in model.named_parameters():
+            #     param.requires_grad = True
 
             # current_lr = manual_lr_schedule(epoch)
             # for param_group in optimizer.param_groups:
@@ -207,6 +206,36 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                 else:
                     outputs = model(samples)
                     loss = criterion(outputs, targets)
+                    # (원래) loss = criterion(outputs, targets)  # 여기에 이어서 추가
+
+                    # regularization 추가
+                    reg_loss = 0.0
+
+                    for name, module in model.named_modules():
+                        for attr in ['split_weights', 'split_bias', 'split_biases', 'split_embeddings_v', 'split_embeddings_h']:
+                            if hasattr(module, attr):
+                                param_dict = getattr(module, attr)
+                                if isinstance(param_dict, nn.ParameterDict) and len(param_dict) > 0:
+                                    
+                                    # 기준(A 영역)은 무조건 첫 번째 키
+                                    first_key = next(iter(param_dict))
+                                    ref_tensor = param_dict[first_key].detach()
+                                    mean_ref = ref_tensor.mean()
+                                    var_ref = ref_tensor.var(unbiased=False)
+
+                                    # 이제 requires_grad=True인 것들(B 영역)만 골라서 reg 걸기
+                                    for key, param in param_dict.items():
+                                        if param.requires_grad:
+                                            param_data = param.detach().view(-1)
+                                            mean_param = param_data.mean()
+                                            var_param = param_data.var(unbiased=False)
+
+                                            # (mean 차이)^2 + (var 차이)^2
+                                            reg_loss += (mean_param - mean_ref).pow(2) + (var_param - var_ref).pow(2)
+
+                    # 마지막에 loss에 추가
+                    loss = loss + 0.001 * reg_loss
+
         else:
             outputs = model(samples)
             if teacher_model:
@@ -216,6 +245,34 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                 loss = 1 / 2 * criterion(outputs, targets) + 1 / 2 * teach_loss(outputs, teacher_label.squeeze())
             else:
                 loss = criterion(outputs, targets)
+                
+                # regularization 추가
+                reg_loss = 0.0
+
+                for name, module in model.named_modules():
+                    for attr in ['split_weights', 'split_bias', 'split_biases', 'split_embeddings_v', 'split_embeddings_h']:
+                        if hasattr(module, attr):
+                            param_dict = getattr(module, attr)
+                            if isinstance(param_dict, nn.ParameterDict) and len(param_dict) > 0:
+                                
+                                # 기준(A 영역)은 무조건 첫 번째 키
+                                first_key = next(iter(param_dict))
+                                ref_tensor = param_dict[first_key].detach()
+                                mean_ref = ref_tensor.mean()
+                                var_ref = ref_tensor.var(unbiased=False)
+
+                                # 이제 requires_grad=True인 것들(B 영역)만 골라서 reg 걸기
+                                for key, param in param_dict.items():
+                                    if param.requires_grad:
+                                        param_data = param.detach().view(-1)
+                                        mean_param = param_data.mean()
+                                        var_param = param_data.var(unbiased=False)
+
+                                        # (mean 차이)^2 + (var 차이)^2
+                                        reg_loss += (mean_param - mean_ref).pow(2) + (var_param - var_ref).pow(2)
+
+                # 마지막에 loss에 추가
+                loss = loss + 0.001 * reg_loss
 
         loss_value = loss.item()
 
@@ -244,7 +301,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
-    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}, optimizer
+    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 @torch.no_grad()
 def evaluate(data_loader, model, device, amp=True, choices=None, mode='super', retrain_config=None, epoch=None):
@@ -253,40 +310,40 @@ def evaluate(data_loader, model, device, amp=True, choices=None, mode='super', r
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Test:'
 
-    curriculum_epoch = [-1, 0, 21]
-    # curriculum_epoch = [-1, 0, 41]
+    # curriculum_epoch = [-1, 0, 21]
+    curriculum_epoch = [-1, 0, 41]
 
     # switch to evaluation mode
     model.eval()
     if mode == 'super':
         # config = sample_configs(choices=choices)
         # config = sample_configs_curriculum(choices=choices, epoch=epoch, curriculum_epoch=curriculum_epoch) 
-        config = {'layer_num': 13, 'mlp_ratio': [4.0, 3.5, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 3.5, 3.5, 4.0, 3.5, 3.5], 'num_heads': [4, 3, 4, 3, 3, 4, 4, 3, 4, 4, 4, 3, 4], 'embed_dim': [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216]}
+        # config = {'layer_num': 13, 'mlp_ratio': [4.0, 3.5, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 3.5, 3.5, 4.0, 3.5, 3.5], 'num_heads': [4, 3, 4, 3, 3, 4, 4, 3, 4, 4, 4, 3, 4], 'embed_dim': [216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216, 216]}
         # config = {'layer_num': 14, 'mlp_ratio': [4.0, 4.0, 3.5, 4.0, 3.5, 3.5, 3.5, 3.5, 4.0, 4.0, 3.5, 3.5, 3.5, 3.5], 'num_heads': [3, 3, 4, 4, 3, 3, 4, 4, 4, 4, 4, 3, 4, 3], 'embed_dim': [240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240]}
-        # if epoch % 2 == 1:
-        #     config = {
-        #         'layer_num': 13,
-        #         'mlp_ratio': [4.0, 3.5, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 3.5, 3.5, 4.0, 3.5, 3.5],
-        #         'num_heads': [4, 3, 4, 3, 3, 4, 4, 3, 4, 4, 4, 3, 4],
-        #         'embed_dim': [216] * 13
-        #     }
-        # else:
-        #     config = {
-        #         'layer_num': 14,
-        #         'mlp_ratio': [4.0, 4.0, 3.5, 4.0, 3.5, 3.5, 3.5, 3.5, 4.0, 4.0, 3.5, 3.5, 3.5, 3.5],
-        #         'num_heads': [3, 3, 4, 4, 3, 3, 4, 4, 4, 4, 4, 3, 4, 3],
-        #         'embed_dim': [240] * 14
-        #     }
+        if epoch % 2 == 1:
+            config = {
+                'layer_num': 13,
+                'mlp_ratio': [4.0, 3.5, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 3.5, 3.5, 4.0, 3.5, 3.5],
+                'num_heads': [4, 3, 4, 3, 3, 4, 4, 3, 4, 4, 4, 3, 4],
+                'embed_dim': [216] * 13
+            }
+        else:
+            config = {
+                'layer_num': 14,
+                'mlp_ratio': [4.0, 4.0, 3.5, 4.0, 3.5, 3.5, 3.5, 3.5, 4.0, 4.0, 3.5, 3.5, 3.5, 3.5],
+                'num_heads': [3, 3, 4, 4, 3, 3, 4, 4, 4, 4, 4, 3, 4, 3],
+                'embed_dim': [240] * 14
+            }
 
         model_module = unwrap_model(model)
         model_module.set_sample_config(config=config)
 
-        for name, param in model.named_parameters():
-            # 💡 self.weight, self.bias는 제외
-            if name.endswith("weight") or name.endswith("bias"):
-                continue  # 완전 제외, requires_grad 유지
-            else:
-                param.requires_grad = True
+        # for name, param in model.named_parameters():
+        #     # 💡 self.weight, self.bias는 제외
+        #     if name.endswith("weight") or name.endswith("bias"):
+        #         continue  # 완전 제외, requires_grad 유지
+        #     else:
+        #         param.requires_grad = True
 
     else:
         config = retrain_config

@@ -453,21 +453,22 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
             dim0_sizes = sorted({int(e * r) for e in embed_dims for r in mlp_ratios})
             dim0_sizes += [self.super_out_dim]
             if case_num is not None:
-                # if case_num == 1:
-                #     true_label = [(1)]
-                # elif case_num == 2:
-                #     true_label = [(2), (3)]
-                # elif case_num == 3:
-                #     true_label = [(4), (5), (6)]
-
-                ## freeze를 확실히 하려면 이게 맞음.
-                if case_num == 1: 
-                    true_label = [(1), (2), (3)]
+                if case_num == 1:
+                    true_label = [(1)]
                 elif case_num == 2:
-                    # true_label = [(4), (5)]
-                    true_label = [(4), (5), (6)]
+                    # true_label = [(2), (3)]
+                    true_label = [(2), (3), (4), (5), (6)]
                 elif case_num == 3:
-                    true_label = [(6)]
+                    true_label = [(4), (5), (6)]
+
+                # ## freeze를 확실히 하려면 이게 맞음.
+                # if case_num == 1: 
+                #     true_label = [(1), (2), (3)]
+                # elif case_num == 2:
+                #     # true_label = [(4), (5)]
+                #     true_label = [(4), (5), (6)]
+                # elif case_num == 3:
+                #     true_label = [(6)]
         else:
             dim0_sizes = embed_dims + [self.super_out_dim]
             if case_num is not None:
@@ -485,6 +486,7 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
             key = f'bias_{i+1}'
             if case_num is not None:
                 self.split_bias[key].requires_grad = ((i + 1) in true_label)
+                # self.split_bias[key].requires_grad = True
             collected_bias.append(self.split_bias[key])
 
         # if case_num is not None:
@@ -525,6 +527,7 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
             # active = (dim >= sample_out_dim)
             active = (dim >= dim0_sizes[1]) # 이거 dim0_sizes[1]로 하드코딩
             self.split_bias[key].requires_grad = active
+            # self.split_bias[key].requires_grad = True
             collected_bias.append(self.split_bias[key])
 
 
@@ -556,6 +559,7 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
             # active = (dim >= sample_out_dim)
             active = (dim >= dim0_sizes[1]) # 이거 dim0_sizes[1]로 하드코딩
             self.split_bias[key].requires_grad = active
+            # self.split_bias[key].requires_grad = True
             collected_bias.append(self.split_bias[key])
 
 

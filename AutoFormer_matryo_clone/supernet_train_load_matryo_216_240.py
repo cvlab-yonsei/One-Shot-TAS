@@ -14,7 +14,7 @@ from timm.scheduler import create_scheduler
 from timm.optim import create_optimizer
 from timm.utils import NativeScaler
 from lib.datasets import build_dataset
-from supernet_engine_load_matryo_216 import train_one_epoch, evaluate
+from supernet_engine_load_matryo_216_240 import train_one_epoch, evaluate
 from lib.samplers import RASampler
 from lib import utils
 from lib.config import cfg, update_config_from_file
@@ -89,7 +89,7 @@ def get_args_parser():
     # Learning rate schedule parameters
     parser.add_argument('--sched', default='cosine', type=str, metavar='SCHEDULER',
                         help='LR scheduler (default: "cosine"')
-    parser.add_argument('--lr', type=float, default=1e-4, metavar='LR', # 5e-4 -> 0.001
+    parser.add_argument('--lr', type=float, default=5e-4, metavar='LR', # 5e-4 -> 0.001
                         help='learning rate (default: 5e-4)')
     parser.add_argument('--lr-noise', type=float, nargs='+', default=None, metavar='pct, pct',
                         help='learning rate noise on/off epoch percentages')
@@ -97,7 +97,7 @@ def get_args_parser():
                         help='learning rate noise limit percent (default: 0.67)')
     parser.add_argument('--lr-noise-std', type=float, default=1.0, metavar='STDDEV',
                         help='learning rate noise std-dev (default: 1.0)')
-    parser.add_argument('--warmup-lr', type=float, default=0.0001, metavar='LR', # 1e-6 -> 0.0001
+    parser.add_argument('--warmup-lr', type=float, default=1e-6, metavar='LR', # 1e-6 -> 0.0001
                         help='warmup learning rate (default: 1e-6)')
     parser.add_argument('--min-lr', type=float, default=0.00001, metavar='LR', # 1e-5 -> 0.00001
                         help='lower lr bound for cyclic schedulers that hit 0 (1e-5)')
@@ -184,7 +184,7 @@ def get_args_parser():
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
-    parser.add_argument('--dist_url', default='tcp://localhost:2040', help='url used to set up distributed training')
+    parser.add_argument('--dist_url', default='tcp://localhost:2041', help='url used to set up distributed training')
     parser.add_argument('--save_checkpoint_path', default='', help='save checkpoint to the path')
     parser.add_argument('--save_log_path', default='', help='save log file to the path')
     parser.add_argument('--interval', default=1, type=int, help='interval of reusing top-k subnet searched by the sn indicator')
@@ -398,7 +398,7 @@ def main(args):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
 
-        train_stats, optimizer = train_one_epoch(
+        train_stats = train_one_epoch(
             model, criterion, data_loader_train,
             optimizer, device, epoch, loss_scaler,
             args.clip_grad, model_ema, mixup_fn,

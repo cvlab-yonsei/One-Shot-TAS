@@ -199,6 +199,7 @@ def sample_bias(split_bias, sample_out_dim, sample_out_dim_prev, dim0_splits, ca
 
         for i in range(len(dim0_splits)):
             split_bias[f'bias_{i+1}'].requires_grad = ((i + 1) in true_label)
+            # split_bias[f'bias_{i+1}'].requires_grad = True
 
         # if case_num is not None:
         #     init_split_parameters_with_gaussian(split_bias)

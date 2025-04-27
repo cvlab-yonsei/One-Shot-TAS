@@ -74,6 +74,7 @@ class PatchembedConvSuper(nn.Conv2d):
             for i in range(len(self.dim0_splits)):
                 self.split_weights[f'w{i+1}'].requires_grad = ((i + 1) in true_label)
                 self.split_biases[f'b{i+1}'].requires_grad = ((i + 1) in true_label)
+                # self.split_biases[f'b{i+1}'].requires_grad = True
 
             # if case_num is not None:
             #     init_split_parameters_with_gaussian(self.split_weights)

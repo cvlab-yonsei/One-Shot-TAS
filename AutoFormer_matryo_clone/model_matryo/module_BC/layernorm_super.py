@@ -69,6 +69,7 @@ class LayerNormSuper(nn.LayerNorm):
             # active = (dim >= sample_embed_dim) # 이거 embed_dims[1]로 하드코딩
             active = (dim >= embed_dims[1]) # 이거 embed_dims[1]로 하드코딩
             self.split_bias[f'bias_{i+1}'].requires_grad = active
+            # self.split_bias[f'bias_{i+1}'].requires_grad = True
             self.split_weights[f'w_{i+1}'].requires_grad = active
 
 

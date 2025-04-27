@@ -3,10 +3,17 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from model_matryo.module.Linear_super import LinearSuper
-from model_matryo.module.layernorm_super import LayerNormSuper
-from model_matryo.module.multihead_super import AttentionSuper
-from model_matryo.module.embedding_super import PatchembedSuper
+
+# from model_matryo.module.Linear_super import LinearSuper
+# from model_matryo.module.layernorm_super import LayerNormSuper
+# from model_matryo.module.multihead_super import AttentionSuper
+# from model_matryo.module.embedding_super import PatchembedSuper
+
+from model_matryo.module_BC.Linear_super import LinearSuper
+from model_matryo.module_BC.layernorm_super import LayerNormSuper
+from model_matryo.module_BC.multihead_super import AttentionSuper
+from model_matryo.module_BC.embedding_super import PatchembedSuper
+
 from model_matryo.utils import trunc_normal_
 from model_matryo.utils import DropPath
 import numpy as np
