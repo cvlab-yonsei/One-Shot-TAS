@@ -272,7 +272,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                                         reg_loss += (mean_param - mean_ref).pow(2) + (var_param - var_ref).pow(2)
 
                 # 마지막에 loss에 추가
-                loss = loss + 0.001 * reg_loss
+                loss = loss + 0.005 * reg_loss
 
         loss_value = loss.item()
 
