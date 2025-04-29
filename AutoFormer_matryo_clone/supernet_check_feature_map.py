@@ -327,6 +327,45 @@ def main(args):
         plt.savefig(filename)
         plt.close()
 
+    # ==================================
+
+    def plot_histogram(tensor, filename, bin_size=5):
+        arr = tensor.cpu().numpy()
+
+        if arr.ndim == 4:  # (B, C, H, W)
+            arr = arr[0]
+            arr = arr.mean(axis=0)  # (H, W)
+        elif arr.ndim == 3:  # (B, S, F)
+            arr = arr[0]
+            arr = arr.mean(axis=0)  # (F,)
+        elif arr.ndim == 2:
+            pass
+        else:
+            print(f"Skip (unsupported shape): {filename} shape {arr.shape}")
+            return
+
+        if arr.ndim == 2:
+            line = arr.mean(axis=0)  # (W,)
+        elif arr.ndim == 1:
+            line = arr
+        else:
+            print(f"Skip (unsupported dimension): {filename} shape {arr.shape}")
+            return
+
+        # x축을 bin_size 단위로 묶기
+        W = line.shape[0]
+        num_bins = W // bin_size
+        binned = line[:num_bins * bin_size].reshape(num_bins, bin_size).mean(axis=1)
+
+        # 히스토그램처럼 막대 그래프
+        plt.figure(figsize=(10, 4))
+        plt.bar(np.arange(num_bins) * bin_size, binned, width=bin_size, align='edge')
+        plt.title(filename)
+        plt.xlabel(f'X-axis (grouped every {bin_size})')
+        plt.ylabel('Mean over Y')
+        plt.tight_layout()
+        plt.savefig(filename)
+        plt.close()
 
     # ===== 저장 =====
     for name, feat in feature_outputs.items():
@@ -341,6 +380,9 @@ def main(args):
             linegraph_path = os.path.join(output_dir, f"{name.replace('.', '_')}_linegraph.png")
             print(f"[Saving Line Graph] {name} | shape: {feat.shape}")
             plot_linegraph(feat, linegraph_path)
+
+            histogram_path = os.path.join(output_dir, f"{name.replace('.', '_')}_histogram.png")
+            plot_histogram(feat, histogram_path)
 
     # ===== Hook 해제 =====
     for h in hooks:
