@@ -358,6 +358,9 @@ def main(args):
         num_bins = W // bin_size
         binned = line[:num_bins * bin_size].reshape(num_bins, bin_size).mean(axis=1)
 
+        # ✅ 전체 그래프를 최소값 기준으로 shift
+        binned = binned - binned.min()
+        
         # 히스토그램처럼 막대 그래프
         plt.figure(figsize=(10, 4))
         plt.bar(np.arange(num_bins) * bin_size, binned, width=bin_size, align='edge')
