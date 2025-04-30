@@ -208,33 +208,33 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     loss = criterion(outputs, targets)
                     # (원래) loss = criterion(outputs, targets)  # 여기에 이어서 추가
 
-                    # regularization 추가
-                    reg_loss = 0.0
+                    # # regularization 추가
+                    # reg_loss = 0.0
 
-                    for name, module in model.named_modules():
-                        for attr in ['split_weights', 'split_bias', 'split_biases', 'split_embeddings_v', 'split_embeddings_h']:
-                            if hasattr(module, attr):
-                                param_dict = getattr(module, attr)
-                                if isinstance(param_dict, nn.ParameterDict) and len(param_dict) > 0:
+                    # for name, module in model.named_modules():
+                    #     for attr in ['split_weights', 'split_bias', 'split_biases', 'split_embeddings_v', 'split_embeddings_h']:
+                    #         if hasattr(module, attr):
+                    #             param_dict = getattr(module, attr)
+                    #             if isinstance(param_dict, nn.ParameterDict) and len(param_dict) > 0:
                                     
-                                    # 기준(A 영역)은 무조건 첫 번째 키
-                                    first_key = next(iter(param_dict))
-                                    ref_tensor = param_dict[first_key].detach()
-                                    mean_ref = ref_tensor.mean()
-                                    var_ref = ref_tensor.var(unbiased=False)
+                    #                 # 기준(A 영역)은 무조건 첫 번째 키
+                    #                 first_key = next(iter(param_dict))
+                    #                 ref_tensor = param_dict[first_key].detach()
+                    #                 mean_ref = ref_tensor.mean()
+                    #                 var_ref = ref_tensor.var(unbiased=False)
 
-                                    # 이제 requires_grad=True인 것들(B 영역)만 골라서 reg 걸기
-                                    for key, param in param_dict.items():
-                                        if param.requires_grad:
-                                            param_data = param.detach().view(-1)
-                                            mean_param = param_data.mean()
-                                            var_param = param_data.var(unbiased=False)
+                    #                 # 이제 requires_grad=True인 것들(B 영역)만 골라서 reg 걸기
+                    #                 for key, param in param_dict.items():
+                    #                     if param.requires_grad:
+                    #                         param_data = param.detach().view(-1)
+                    #                         mean_param = param_data.mean()
+                    #                         var_param = param_data.var(unbiased=False)
 
-                                            # (mean 차이)^2 + (var 차이)^2
-                                            reg_loss += (mean_param - mean_ref).pow(2) + (var_param - var_ref).pow(2)
+                    #                         # (mean 차이)^2 + (var 차이)^2
+                    #                         reg_loss += (mean_param - mean_ref).pow(2) + (var_param - var_ref).pow(2)
 
-                    # 마지막에 loss에 추가
-                    loss = loss + 0.001 * reg_loss
+                    # # 마지막에 loss에 추가
+                    # loss = loss + 0.001 * reg_loss
 
         else:
             outputs = model(samples)
@@ -246,33 +246,33 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             else:
                 loss = criterion(outputs, targets)
                 
-                # regularization 추가
-                reg_loss = 0.0
+                # # regularization 추가
+                # reg_loss = 0.0
 
-                for name, module in model.named_modules():
-                    for attr in ['split_weights', 'split_bias', 'split_biases', 'split_embeddings_v', 'split_embeddings_h']:
-                        if hasattr(module, attr):
-                            param_dict = getattr(module, attr)
-                            if isinstance(param_dict, nn.ParameterDict) and len(param_dict) > 0:
+                # for name, module in model.named_modules():
+                #     for attr in ['split_weights', 'split_bias', 'split_biases', 'split_embeddings_v', 'split_embeddings_h']:
+                #         if hasattr(module, attr):
+                #             param_dict = getattr(module, attr)
+                #             if isinstance(param_dict, nn.ParameterDict) and len(param_dict) > 0:
                                 
-                                # 기준(A 영역)은 무조건 첫 번째 키
-                                first_key = next(iter(param_dict))
-                                ref_tensor = param_dict[first_key].detach()
-                                mean_ref = ref_tensor.mean()
-                                var_ref = ref_tensor.var(unbiased=False)
+                #                 # 기준(A 영역)은 무조건 첫 번째 키
+                #                 first_key = next(iter(param_dict))
+                #                 ref_tensor = param_dict[first_key].detach()
+                #                 mean_ref = ref_tensor.mean()
+                #                 var_ref = ref_tensor.var(unbiased=False)
 
-                                # 이제 requires_grad=True인 것들(B 영역)만 골라서 reg 걸기
-                                for key, param in param_dict.items():
-                                    if param.requires_grad:
-                                        param_data = param.detach().view(-1)
-                                        mean_param = param_data.mean()
-                                        var_param = param_data.var(unbiased=False)
+                #                 # 이제 requires_grad=True인 것들(B 영역)만 골라서 reg 걸기
+                #                 for key, param in param_dict.items():
+                #                     if param.requires_grad:
+                #                         param_data = param.detach().view(-1)
+                #                         mean_param = param_data.mean()
+                #                         var_param = param_data.var(unbiased=False)
 
-                                        # (mean 차이)^2 + (var 차이)^2
-                                        reg_loss += (mean_param - mean_ref).pow(2) + (var_param - var_ref).pow(2)
+                #                         # (mean 차이)^2 + (var 차이)^2
+                #                         reg_loss += (mean_param - mean_ref).pow(2) + (var_param - var_ref).pow(2)
 
-                # 마지막에 loss에 추가
-                loss = loss + 0.005 * reg_loss
+                # # 마지막에 loss에 추가
+                # loss = loss + 0.005 * reg_loss
 
         loss_value = loss.item()
 
