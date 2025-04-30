@@ -192,34 +192,34 @@ def main(args):
         'embed_dim': [192, 216, 240],
         'depth': [12, 13, 14]
     }
-    # model = Vision_TransformerSuper_Matryo(
-    #     img_size=224, patch_size=16, embed_dim=256, depth=14,
-    #     num_heads=4, mlp_ratio=4., qkv_bias=True, drop_rate=0.0,
-    #     drop_path_rate=0.1, gp=True, num_classes=1000,
-    #     max_relative_position=14, relative_position=True,
-    #     change_qkv=True, abs_pos=True, choices=choices
-    # )
-    model = Vision_TransformerSuper(
+    model = Vision_TransformerSuper_Matryo(
         img_size=224, patch_size=16, embed_dim=256, depth=14,
         num_heads=4, mlp_ratio=4., qkv_bias=True, drop_rate=0.0,
         drop_path_rate=0.1, gp=True, num_classes=1000,
         max_relative_position=14, relative_position=True,
-        change_qkv=True, abs_pos=True
-        # , choices=choices
+        change_qkv=True, abs_pos=True, choices=choices
     )
+    # model = Vision_TransformerSuper(
+    #     img_size=224, patch_size=16, embed_dim=256, depth=14,
+    #     num_heads=4, mlp_ratio=4., qkv_bias=True, drop_rate=0.0,
+    #     drop_path_rate=0.1, gp=True, num_classes=1000,
+    #     max_relative_position=14, relative_position=True,
+    #     change_qkv=True, abs_pos=True
+    #     # , choices=choices
+    # )
 
     # 체크포인트 로드
     # ckpt_path = '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch480-24.pth'  # 여기에 .pth 파일 경로를 입력하세요
-    ckpt_path = '/OUTPUT_PATH/checkpoint-original-25.pth'
+    # ckpt_path = '/OUTPUT_PATH/checkpoint-original-25.pth'
     # ckpt_path = '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch480-matryo_load_matryo_216_param-fc-wb-gaus-no-share-1e-4-decay005-0.pth'
-    # ckpt_path = '/OUTPUT_PATH/checkpoint_original_check_only192-no-share-2e-4-decay0001-BC-3.pth'
+    ckpt_path = '/OUTPUT_PATH/checkpoint_original_check_only192-no-share-2e-4-decay0001-BC-3.pth'
     ckpt = torch.load(ckpt_path, map_location='cpu')
     model.load_state_dict(ckpt['model'], strict=False)
 
     model.eval()
 
     # 저장 경로 설정
-    output_dir = './layer_feature_map_heatmaps_ABC/'
+    output_dir = './layer_feature_map_heatmaps_A_BC/'
     os.makedirs(output_dir, exist_ok=True)
 
     # ===== Hook =====
@@ -333,12 +333,12 @@ def main(args):
     def plot_histogram(tensor, filename, bin_size=5):
         arr = tensor.cpu().numpy()
 
-        if arr.ndim == 4:  # (B, C, H, W)
+        if arr.ndim == 4:
             arr = arr[0]
-            arr = arr.mean(axis=0)  # (H, W)
-        elif arr.ndim == 3:  # (B, S, F)
+            arr = arr.mean(axis=0)
+        elif arr.ndim == 3:
             arr = arr[0]
-            arr = arr.mean(axis=0)  # (F,)
+            arr = arr.mean(axis=0)
         elif arr.ndim == 2:
             pass
         else:
@@ -346,30 +346,37 @@ def main(args):
             return
 
         if arr.ndim == 2:
-            line = arr.mean(axis=0)  # (W,)
+            line = arr.mean(axis=0)
         elif arr.ndim == 1:
             line = arr
         else:
             print(f"Skip (unsupported dimension): {filename} shape {arr.shape}")
             return
 
-        # x축을 bin_size 단위로 묶기
         W = line.shape[0]
         num_bins = W // bin_size
         binned = line[:num_bins * bin_size].reshape(num_bins, bin_size).mean(axis=1)
 
-        # ✅ 전체 그래프를 최소값 기준으로 shift
-        binned = binned - binned.min()
-        
-        # 히스토그램처럼 막대 그래프
+        # ✅ shift & remember min
+        min_val = binned.min()
+        binned_shifted = binned - min_val
+
+        # ✅ draw shifted histogram
         plt.figure(figsize=(10, 4))
-        plt.bar(np.arange(num_bins) * bin_size, binned, width=bin_size, align='edge')
+        plt.bar(np.arange(num_bins) * bin_size, binned_shifted, width=bin_size, align='edge')
         plt.title(filename)
         plt.xlabel(f'X-axis (grouped every {bin_size})')
-        plt.ylabel('Mean over Y')
+        plt.ylabel('Feature Value')
+
+        # ✅ relabel y-axis with original values
+        yticks = plt.yticks()[0]
+        ytick_labels = [f'{tick + min_val:.2f}' for tick in yticks]
+        plt.yticks(yticks, ytick_labels)
+
         plt.tight_layout()
         plt.savefig(filename)
         plt.close()
+
 
     # ===== 저장 =====
     for name, feat in feature_outputs.items():

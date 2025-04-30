@@ -206,6 +206,7 @@ class LinearSuper(nn.Linear):
 
     def forward(self, x):
         self.sample_parameters()
+
         # print("self.samples['weight'].shape : ", self.samples['weight'].shape)
         # print("self.samples['bias'].shape : ", self.samples['bias'].shape)
         # return F.linear(x, self.w1, self.bias1) * (self.sample_scale if self.scale else 1)
@@ -248,6 +249,10 @@ def init_split_parameters_with_gaussian(param_dict: nn.ParameterDict):
 # 수정된 sample_weight 함수로, 주어진 법칙대로 requires_grad를 설정함
 
 def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, sample_out_dim_prev=None, pretrained=False, case_num=None):
+    ###
+    case_num = 2
+    ###
+    
     name = self.name
     choices = self.choices
 
@@ -437,10 +442,45 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
     # for key in self.split_weights:
     #     print(f"  {key:10s} -> {self.split_weights[key].requires_grad}")
 
+    #################################
+    if name == 'head':
+        with torch.no_grad():
+            mask = torch.zeros_like(full_weight, dtype=torch.bool)
+            row_offset = 0
+            for i in range(len(dim0_splits)):
+                col_offset = 0
+                for j in range(len(dim1_splits)):
+                    key = f'w{i+1}_{j+1}'
+                    block = self.split_weights[key]
+                    h, w = block.shape
+                    requires_grad = block.requires_grad
+                    mask[row_offset:row_offset+h, col_offset:col_offset+w] = requires_grad
+                    col_offset += w
+                row_offset += h
+
+            W_true = full_weight[mask]
+            W_false = full_weight[~mask]
+
+            if W_true.numel() > 0 and W_false.numel() > 0:
+                norm_true = W_true.norm(p=2)
+                norm_false = W_false.norm(p=2)
+                mean_true = norm_true / W_true.numel()
+                mean_false = norm_false / W_false.numel()
+                λ = (mean_false / mean_true).detach()
+
+                full_weight[mask] *= λ
+
+        # 잘라내기
+        sample_weight = full_weight[:sample_out_dim, :sample_in_dim]
+
     return sample_weight
 
 
 def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False, case_num=None):
+    ###
+    case_num = 2
+    ###
+    
     name = self.name
     choices = self.choices
     
@@ -499,6 +539,8 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
         # for key in self.split_bias:
         #     print(f"  {key:10s} -> {self.split_bias[key].requires_grad}")
 
+        
+
         return sample_bias
 
     elif name == 'head':
@@ -514,6 +556,33 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
         # print(f"\n[🔍 {self.name} - Bias requires_grad status]")
         # for key in self.split_bias:
         #     print(f"  {key:10s} -> {self.split_bias[key].requires_grad}")
+
+    
+        # ####################################
+        # # 🔹 alignment 삽입
+        # with torch.no_grad():
+        #     mask = torch.zeros_like(full_bias, dtype=torch.bool)
+        #     offset = 0
+        #     for i in range(len(dim0_sizes)):
+        #         key = f'bias_{i+1}'
+        #         block = self.split_bias[key]
+        #         length = block.shape[0]
+        #         requires_grad = block.requires_grad
+        #         mask[offset:offset + length] = requires_grad
+        #         offset += length
+
+        #     bias_true = full_bias[mask]
+        #     bias_false = full_bias[~mask]
+
+        #     if bias_true.numel() > 0 and bias_false.numel() > 0:
+        #         mean_true = bias_true.abs().mean()
+        #         mean_false = bias_false.abs().mean()
+        #         λ = (mean_false / mean_true).detach()
+        #         full_bias[mask] *= λ
+
+        # sample_bias = full_bias[:sample_out_dim]
+        # return sample_bias
+        # ####################################
 
         return sample_bias
     
@@ -579,4 +648,5 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
         #     print(f"  {key:10s} -> {self.split_bias[key].requires_grad}")
 
         full_bias = torch.cat(collected_bias, dim=0)
+
         return full_bias[:sample_out_dim]
