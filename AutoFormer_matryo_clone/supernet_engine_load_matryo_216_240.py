@@ -164,7 +164,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     #     optimizer = create_optimizer(args, [p for p in model.parameters() if p.requires_grad])
 
 
-    for samples, targets in metric_logger.log_every(data_loader, print_freq, header):
+    for i, (samples, targets) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
         samples = samples.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
 
@@ -290,6 +290,19 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         else:
             loss.backward()
             optimizer.step()
+
+        # 🔸 마지막 배치에서만 평균 gradient norm 출력
+        if i == len(data_loader) - 1:
+            total_norm = 0.0
+            count = 0
+            for name, param in model.named_parameters():
+                if param.grad is not None:
+                    param_norm = param.grad.data.norm(2)
+                    total_norm += param_norm.item() ** 2
+                    count += 1
+            total_norm = total_norm ** 0.5
+            avg_grad = total_norm / (count if count > 0 else 1)
+            print(f"[Epoch {epoch}] Avg Grad Norm: {avg_grad:.6f}")
 
         torch.cuda.synchronize()
         if model_ema is not None:

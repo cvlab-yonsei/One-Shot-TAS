@@ -212,14 +212,15 @@ def main(args):
     # ckpt_path = '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch480-24.pth'  # 여기에 .pth 파일 경로를 입력하세요
     # ckpt_path = '/OUTPUT_PATH/checkpoint-original-25.pth'
     # ckpt_path = '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch480-matryo_load_matryo_216_param-fc-wb-gaus-no-share-1e-4-decay005-0.pth'
-    ckpt_path = '/OUTPUT_PATH/checkpoint_original_check_only192-no-share-2e-4-decay0001-BC-3.pth'
+    # ckpt_path = '/OUTPUT_PATH/checkpoint_original_check_only192-no-share-2e-4-decay0001-BC-3.pth'
+    ckpt_path = '/OUTPUT_PATH/checkpoint-lr0002-feature-align-all-2.pth'
     ckpt = torch.load(ckpt_path, map_location='cpu')
     model.load_state_dict(ckpt['model'], strict=False)
 
     model.eval()
 
     # 저장 경로 설정
-    output_dir = './layer_feature_map_heatmaps_A_BC/'
+    output_dir = './layer_feature_map_heatmaps_A_BC_feature_align/'
     os.makedirs(output_dir, exist_ok=True)
 
     # ===== Hook =====
@@ -384,7 +385,7 @@ def main(args):
 
         print(f"[Saving Feature Map] {name} | shape: {feat.shape}")
         
-        # plot_heatmap(feat, save_path)
+        plot_heatmap(feat, save_path)
 
         # blocks_1 레이어에 대해서만 꺾은선 그래프 추가로 저장
         if name.startswith('blocks.1'):

@@ -90,6 +90,58 @@ class PatchembedConvSuper(nn.Conv2d):
         self.sampled_weight = full_weight[:sample_embed_dim]
         self.sampled_bias = full_bias[:sample_embed_dim]
 
+        # ###########################
+
+        # # 🔹 weight alignment
+        # with torch.no_grad():
+        #     mask = torch.zeros_like(full_weight, dtype=torch.bool)
+        #     offset = 0
+        #     for i in range(j_end + 1):
+        #         w = self.split_weights[f'w{i+1}']
+        #         h = w.shape[0]
+        #         mask[offset:offset + h] = w.requires_grad
+        #         offset += h
+
+        #     W_true = full_weight[mask]
+        #     W_false = full_weight[~mask]
+
+        #     if W_true.numel() > 0 and W_false.numel() > 0:
+        #         norm_true = W_true.norm(p=2)
+        #         norm_false = W_false.norm(p=2)
+        #         mean_true = norm_true / W_true.numel()
+        #         mean_false = norm_false / W_false.numel()
+        #         λ = (mean_false / mean_true).detach()
+        #         # λ = (mean_false / (mean_true + 1e-8)).clamp(min=0.1, max=5.0).detach()
+
+        #         full_weight[mask] *= λ
+
+        # self.sampled_weight = full_weight[:sample_embed_dim]
+
+        # # 🔹 bias alignment
+        # with torch.no_grad():
+        #     mask = torch.zeros_like(full_bias, dtype=torch.bool)
+        #     offset = 0
+        #     for i in range(j_end + 1):
+        #         b = self.split_biases[f'b{i+1}']
+        #         h = b.shape[0]
+        #         mask[offset:offset + h] = b.requires_grad
+        #         offset += h
+
+        #     bias_true = full_bias[mask]
+        #     bias_false = full_bias[~mask]
+
+        #     if bias_true.numel() > 0 and bias_false.numel() > 0:
+        #         mean_true = bias_true.abs().mean()
+        #         mean_false = bias_false.abs().mean()
+        #         λ = (mean_false / mean_true).detach()
+        #         # λ = (mean_false / (mean_true + 1e-8)).clamp(min=0.1, max=5.0).detach()
+
+        #         full_bias[mask] *= λ
+
+        # self.sampled_bias = full_bias[:sample_embed_dim]
+
+        # ###########################
+
         # # Print requires_grad status
         # print(f"\n[🔍 PatchembedConvSuper - Weight requires_grad status]")
         # for key in self.split_weights:
