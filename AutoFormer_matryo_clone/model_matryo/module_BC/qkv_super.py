@@ -172,34 +172,34 @@ def sample_weight(split_weights, sample_in_dim, sample_out_dim, sample_in_dim_pr
         row_blocks.append(torch.cat(col_blocks, dim=1))
     full_weight = torch.cat(row_blocks, dim=0)
 
-    # #####################################
+    #####################################
 
-    # # 🔹 Feature alignment (weight)
-    # with torch.no_grad():
-    #     mask = torch.zeros_like(full_weight, dtype=torch.bool)
-    #     row_offset = 0
-    #     for i in range(len(dim0_splits)):
-    #         col_offset = 0
-    #         for j in range(len(dim1_splits)):
-    #             key = f'w{i+1}_{j+1}'
-    #             w = split_weights[key]
-    #             h, w_ = w.shape
-    #             mask[row_offset:row_offset+h, col_offset:col_offset+w_] = w.requires_grad
-    #             col_offset += w_
-    #         row_offset += h
+    # 🔹 Feature alignment (weight)
+    with torch.no_grad():
+        mask = torch.zeros_like(full_weight, dtype=torch.bool)
+        row_offset = 0
+        for i in range(len(dim0_splits)):
+            col_offset = 0
+            for j in range(len(dim1_splits)):
+                key = f'w{i+1}_{j+1}'
+                w = split_weights[key]
+                h, w_ = w.shape
+                mask[row_offset:row_offset+h, col_offset:col_offset+w_] = w.requires_grad
+                col_offset += w_
+            row_offset += h
 
-    #     W_true = full_weight[mask]
-    #     W_false = full_weight[~mask]
+        W_true = full_weight[mask]
+        W_false = full_weight[~mask]
 
-    #     if W_true.numel() > 0 and W_false.numel() > 0:
-    #         mean_true = W_true.norm(p=2) / W_true.numel()
-    #         mean_false = W_false.norm(p=2) / W_false.numel()
-    #         λ = (mean_false / mean_true).detach()
-    #         # λ = (mean_false / (mean_true + 1e-8)).clamp(min=0.1, max=5.0).detach()
+        if W_true.numel() > 0 and W_false.numel() > 0:
+            mean_true = W_true.norm(p=2) / W_true.numel()
+            mean_false = W_false.norm(p=2) / W_false.numel()
+            λ = (mean_false / mean_true).detach()
+            # λ = (mean_false / (mean_true + 1e-8)).clamp(min=0.1, max=5.0).detach()
 
-    #         full_weight[mask] *= λ
+            full_weight[mask] *= λ
 
-    # #####################################
+    #####################################
 
     # print(f"\n[🔍 qkv_super - Weight requires_grad status]")
     # for key in split_weights:
@@ -236,31 +236,31 @@ def sample_bias(split_bias, sample_out_dim, sample_out_dim_prev, dim0_splits, ca
 
     full_bias = torch.cat([split_bias[f'bias_{i+1}'] for i in range(len(dim0_splits))], dim=0)
 
-    # ###############################
+    ###############################
 
-    # # 🔹 Feature alignment (bias)
-    # with torch.no_grad():
-    #     mask = torch.zeros_like(full_bias, dtype=torch.bool)
-    #     offset = 0
-    #     for i in range(len(dim0_splits)):
-    #         b = split_bias[f'bias_{i+1}']
-    #         L = b.shape[0]
-    #         mask[offset:offset + L] = b.requires_grad
-    #         offset += L
+    # 🔹 Feature alignment (bias)
+    with torch.no_grad():
+        mask = torch.zeros_like(full_bias, dtype=torch.bool)
+        offset = 0
+        for i in range(len(dim0_splits)):
+            b = split_bias[f'bias_{i+1}']
+            L = b.shape[0]
+            mask[offset:offset + L] = b.requires_grad
+            offset += L
 
-    #     B_true = full_bias[mask]
-    #     B_false = full_bias[~mask]
+        B_true = full_bias[mask]
+        B_false = full_bias[~mask]
 
-    #     if B_true.numel() > 0 and B_false.numel() > 0:
-    #         mean_true = B_true.abs().mean()
-    #         mean_false = B_false.abs().mean()
-    #         λ = (mean_false / mean_true).detach()
-    #         # λ = (mean_false / (mean_true + 1e-8)).clamp(min=0.1, max=5.0).detach()
+        if B_true.numel() > 0 and B_false.numel() > 0:
+            mean_true = B_true.abs().mean()
+            mean_false = B_false.abs().mean()
+            λ = (mean_false / mean_true).detach()
+            # λ = (mean_false / (mean_true + 1e-8)).clamp(min=0.1, max=5.0).detach()
 
-    #         full_bias[mask] *= λ
+            full_bias[mask] *= λ
 
 
-    # ###############################
+    ###############################
     
     # print(f"\n[🔍 qkv_super - Bias requires_grad status]")
     # for key in split_bias:

@@ -151,15 +151,15 @@
 # --resume '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch480-24.pth' --output /OUTPUT_PATH --batch-size 128 \
 # --save_checkpoint_path 'checkpoint-lr0002-feature-align-all-' --save_log_path './log/supernet_lr0002_feature_align_all.log'
 
-python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train_load_matryo_216_240.py --data-path '/dataset/ILSVRC2012' --gp \
---change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 40 --warmup-epochs 0 \
---resume '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch480-24.pth' --output /OUTPUT_PATH --batch-size 128 \
---save_checkpoint_path 'checkpoint-lr0002-feature-align-all-check-grad-' --save_log_path './log/supernet_lr0002_feature_align_all_check_grad.log'
-
-# python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train_load_matryo_216_240_not_A.py --data-path '/dataset/ILSVRC2012' --gp \
+# python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train_load_matryo_216_240.py --data-path '/dataset/ILSVRC2012' --gp \
 # --change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 40 --warmup-epochs 0 \
-# --resume '/OUTPUT_PATH/checkpoint-lr0002-feature-align-all-1.pth' --output /OUTPUT_PATH --batch-size 128 \
-# --save_checkpoint_path 'checkpoint-lr0002-feature-align-all-not-clip-' --save_log_path './log/supernet_lr0002_feature_align_all_not_clip.log'
+# --resume '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch480-24.pth' --output /OUTPUT_PATH --batch-size 128 \
+# --save_checkpoint_path 'checkpoint-lr0002-feature-align-all-check-grad-' --save_log_path './log/supernet_lr0002_feature_align_all_check_grad.log'
+
+python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train_load_matryo_216_240_not_A.py --data-path '/dataset/ILSVRC2012' --gp \
+--change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 20 --warmup-epochs 0 \
+--resume '/OUTPUT_PATH/checkpoint-lr0002-feature-align-all-check-grad-1.pth' --output /OUTPUT_PATH --batch-size 128 \
+--save_checkpoint_path 'checkpoint-lr00012-feature-align-all-not-clip-check-grad-' --save_log_path './log/supernet_lr00012_feature_align_all_not_clip_check_grad.log'
 
 
 # python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution_original.py --data-path '/dataset/ILSVRC2012' --gp \
