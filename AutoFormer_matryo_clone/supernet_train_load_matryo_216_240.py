@@ -89,7 +89,7 @@ def get_args_parser():
     # Learning rate schedule parameters
     parser.add_argument('--sched', default='cosine', type=str, metavar='SCHEDULER',
                         help='LR scheduler (default: "cosine"')
-    parser.add_argument('--lr', type=float, default=0.0000005, metavar='LR', # 5e-4 -> 0.001
+    parser.add_argument('--lr', type=float, default=0.0001, metavar='LR', # 5e-4 -> 0.001
                         help='learning rate (default: 5e-4)')
     parser.add_argument('--lr-noise', type=float, nargs='+', default=None, metavar='pct, pct',
                         help='learning rate noise on/off epoch percentages')
@@ -99,7 +99,7 @@ def get_args_parser():
                         help='learning rate noise std-dev (default: 1.0)')
     parser.add_argument('--warmup-lr', type=float, default=1e-6, metavar='LR', # 1e-6 -> 0.0001
                         help='warmup learning rate (default: 1e-6)')
-    parser.add_argument('--min-lr', type=float, default=0.000001, metavar='LR', # 1e-5 -> 0.00001
+    parser.add_argument('--min-lr', type=float, default=0.00001, metavar='LR', # 1e-5 -> 0.00001
                         help='lower lr bound for cyclic schedulers that hit 0 (1e-5)')
     parser.add_argument('--lr-power', type=float, default=1.0,
                         help='power of the polynomial lr scheduler')
