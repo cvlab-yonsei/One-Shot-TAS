@@ -213,14 +213,16 @@ def main(args):
     # ckpt_path = '/OUTPUT_PATH/checkpoint-original-25.pth'
     # ckpt_path = '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch480-matryo_load_matryo_216_param-fc-wb-gaus-no-share-1e-4-decay005-0.pth'
     # ckpt_path = '/OUTPUT_PATH/checkpoint_original_check_only192-no-share-2e-4-decay0001-BC-3.pth'
-    ckpt_path = '/OUTPUT_PATH/checkpoint-lr0002-feature-align-all-2.pth'
+    # ckpt_path = '/OUTPUT_PATH/checkpoint-lr0002-feature-align-all-2.pth'
+    ckpt_path = '/OUTPUT_PATH/checkpoint-lr000182-feature-align-all-not-clip-check-grad-8-40-4.pth'
+    
     ckpt = torch.load(ckpt_path, map_location='cpu')
     model.load_state_dict(ckpt['model'], strict=False)
 
     model.eval()
 
     # 저장 경로 설정
-    output_dir = './layer_feature_map_heatmaps_A_BC_feature_align/'
+    output_dir = './layer_feature_map_heatmaps_A_BC_feature_align_no_clip_trained/'
     os.makedirs(output_dir, exist_ok=True)
 
     # ===== Hook =====
@@ -259,7 +261,7 @@ def main(args):
         'mlp_ratio': [4.0] * 14,
         'num_heads': [4] * 14,
     }
-    model_module.set_sample_config(config=sample_config)
+    model_module.set_sample_config(config=sample_config, case_num=2)
 
     # + 추가로 patch_embed_super 내부에도 수동 세팅
     if hasattr(model_module, 'patch_embed_super'):
