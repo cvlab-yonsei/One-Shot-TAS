@@ -113,8 +113,8 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     
     # curriculum_epoch = [-1, 0, 21]
     curriculum_epoch = [-1, 0, 41]
-    case_num = None
-    # case_num = 2 # 이거 괜찮나?
+    # case_num = None
+    case_num = 2 # 이거 괜찮나?
 
     if epoch in curriculum_epoch:
         case_num = curriculum_epoch.index(epoch) + 1
@@ -175,8 +175,8 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             model_module = unwrap_model(model)
             model_module.set_sample_config(config=config, case_num=case_num)
 
-            if case_num is not None:
-                case_num = None # None이 아닐때마다 gaussian init해주는거라 그거 방지.
+            # if case_num is not None:
+            #     case_num = None # None이 아닐때마다 gaussian init해주는거라 그거 방지.
 
             # for name, param in model.named_parameters():
             #     param.requires_grad = True
@@ -303,6 +303,18 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             total_norm = total_norm ** 0.5
             avg_grad = total_norm / (count if count > 0 else 1)
             print(f"[Epoch {epoch}] Avg Grad Norm: {avg_grad:.6f}")
+
+            # 🔸 blocks.1, blocks.11, blocks.12 에 대해 lambda_log 출력
+            target_blocks = {'blocks.1', 'blocks.11', 'blocks.12'}
+
+            for name, module in model.module.named_modules():
+                if any(f'blocks.{idx}' in name for idx in [1, 11, 12]):
+                    # if isinstance(module, LinearSuper):
+                    if hasattr(module, 'lambda_log') and isinstance(module.lambda_log, dict):
+                        if len(module.lambda_log) > 0:
+                            lambda_str = ', '.join([f"{k}: {v:.4f}" for k, v in module.lambda_log.items()])
+                            print(f"[{name}] λ: {lambda_str}")
+
 
         torch.cuda.synchronize()
         if model_ema is not None:

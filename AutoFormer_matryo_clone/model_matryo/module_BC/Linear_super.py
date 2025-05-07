@@ -32,6 +32,8 @@ class LinearSuper(nn.Linear):
         self.name = name
         self.choices = choices
 
+        self.lambda_log = {}  # λ 저장용
+
         if choices is not None and name is not None:
             if name == 'fc1' or name == 'fc2':
                 embed_dims = sorted(set(choices['embed_dim']))
@@ -446,7 +448,8 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
     # if name == 'head':
     # 걍 모든 종류에 대해서
     with torch.no_grad():
-        mask = torch.zeros_like(full_weight, dtype=torch.bool)
+        # 1. W_false 통합 계산
+        full_mask = torch.zeros_like(full_weight, dtype=torch.bool)
         row_offset = 0
         for i in range(len(dim0_splits)):
             col_offset = 0
@@ -455,27 +458,44 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
                 block = self.split_weights[key]
                 h, w = block.shape
                 requires_grad = block.requires_grad
-                mask[row_offset:row_offset+h, col_offset:col_offset+w] = requires_grad
+                full_mask[row_offset:row_offset + h, col_offset:col_offset + w] = requires_grad
                 col_offset += w
             row_offset += h
 
-        W_true = full_weight[mask]
-        W_false = full_weight[~mask]
+        W_false = full_weight[~full_mask]
+        mean_false = W_false.norm(p=2) / W_false.numel()
 
-        if W_true.numel() > 0 and W_false.numel() > 0:
-            norm_true = W_true.norm(p=2)
-            norm_false = W_false.norm(p=2)
-            mean_true = norm_true / W_true.numel()
-            mean_false = norm_false / W_false.numel()
-            λ = (mean_false / mean_true).detach()
+        # 2. 각 requires_grad=True인 블록마다 개별 λ 적용
+        # 개별 block별로 requires_grad=True에 대해 λ 계산 및 scaling 적용
+        offset_row = 0
+        for i in range(len(dim0_splits)):
+            offset_col = 0
+            for j in range(len(dim1_splits)):
+                key = f'w{i+1}_{j+1}'
+                block = self.split_weights[key]
+                h, w = block.shape
+                if block.requires_grad:
+                    current_block = full_weight[offset_row:offset_row + h, offset_col:offset_col + w]
+                    mean_true = current_block.norm(p=2) / current_block.numel()
+                    λ = (mean_false / (mean_true + 1e-8)).detach()
+                    if torch.isnan(λ):
+                        print("name : ", name)
+                        print("key : ", key)
+                        print("W_false.numel() : ", W_false.numel())
+                        print(f"[⚠️ NaN λ] mean_false: {mean_false.item():.6f}, mean_true: {mean_true.item():.6f}")
 
-            full_weight[mask] *= λ
+                    # ✔ 저장
+                    self.lambda_log[key] = λ.item()
 
-    
+                    full_weight[offset_row:offset_row + h, offset_col:offset_col + w] *= λ
+                offset_col += w
+            offset_row += h
+
+
     # 잘라내기
     sample_weight = full_weight[:sample_out_dim, :sample_in_dim]
 
-        ##############################
+    ##############################
 
     return sample_weight
 
@@ -489,6 +509,7 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
     choices = self.choices
 
     sample_bias = []
+    full_bias = []
     
     if name in ['fc1', 'fc2']:
         embed_dims = sorted(set(choices['embed_dim']))
@@ -547,7 +568,7 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
 
         
 
-        return sample_bias
+        # return sample_bias
 
     elif name == 'head':
         # self.split_bias['bias'].requires_grad = True
@@ -596,7 +617,7 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
 
         full_bias = torch.cat(collected_bias, dim=0)
         sample_bias = full_bias[:sample_out_dim]
-        return sample_bias
+        # return sample_bias
 
     elif name == 'proj':
         embed_dims = sorted(set(choices['embed_dim']))
@@ -630,11 +651,12 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
         full_bias = torch.cat(collected_bias, dim=0)
         sample_bias = full_bias[:sample_out_dim]
 
-        return sample_bias
+        # return sample_bias
     
     ####################################
-    # 🔹 alignment 삽입
+    # 🔹 alignment 삽입 (개별 정규화 방식)
     with torch.no_grad():
+        # 먼저 전체 full_bias에서 requires_grad=False 영역 기준 평균 계산
         mask = torch.zeros_like(full_bias, dtype=torch.bool)
         offset = 0
         for i in range(len(dim0_sizes)):
@@ -645,18 +667,32 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
             mask[offset:offset + length] = requires_grad
             offset += length
 
-        bias_true = full_bias[mask]
         bias_false = full_bias[~mask]
+        mean_false = bias_false.abs().mean()
 
-        if bias_true.numel() > 0 and bias_false.numel() > 0:
-            mean_true = bias_true.abs().mean()
-            mean_false = bias_false.abs().mean()
-            λ = (mean_false / mean_true).detach()
-            full_bias[mask] *= λ
+        # 개별 block별로 requires_grad=True에 대해 λ 계산 및 scaling 적용
+        offset = 0
+        for i in range(len(dim0_sizes)):
+            key = f'bias_{i+1}'
+            block = self.split_bias[key]
+            length = block.shape[0]
+            if block.requires_grad:
+                current_block = full_bias[offset:offset + length]
+                mean_true = current_block.abs().mean()
+                λ = (mean_false / (mean_true + 1e-8)).detach()
 
+                # print("lambda : ", λ)
+                # ✔ 저장
+                self.lambda_log[key] = λ.item()
+
+                full_bias[offset:offset + length] *= λ
+            offset += length
+
+    # 마지막 슬라이스
     sample_bias = full_bias[:sample_out_dim]
     return sample_bias
     ####################################
+
     
     return sample_bias
     
