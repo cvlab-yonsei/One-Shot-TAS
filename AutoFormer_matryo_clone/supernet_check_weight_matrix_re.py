@@ -3,13 +3,15 @@ import matplotlib.pyplot as plt
 from timm.utils.model import unwrap_model
 import os
 from model_matryo.supernet_transformer import Vision_TransformerSuper as Vision_TransformerSuper_Matryo
+from model.supernet_transformer import Vision_TransformerSuper
+
 import sys
 import warnings
 
 # UserWarning 무시
 warnings.filterwarnings("ignore", category=UserWarning)
 
-sys.stdout = open('check_parameter_checkpoint_original_check_only192_original_optimizer-epoch480-matryo_load_matryo_216-0.log', 'w')
+sys.stdout = open('check_parameter_checkpoint-original-25.log', 'w')
 sys.stderr = sys.stdout
 
 
@@ -33,13 +35,22 @@ model = Vision_TransformerSuper_Matryo(img_size=224,
                                     change_qkv=True, abs_pos=not False,
                                     choices=choices
                                     )
+# model = Vision_TransformerSuper(
+#     img_size=224, patch_size=16, embed_dim=256, depth=14,
+#     num_heads=4, mlp_ratio=4., qkv_bias=True, drop_rate=0.0,
+#     drop_path_rate=0.1, gp=True, num_classes=1000,
+#     max_relative_position=14, relative_position=True,
+#     change_qkv=True, abs_pos=True
+#     # , choices=choices
+# )
 
 # ==== 2. 체크포인트 로드 ====
 # ckpt_path = '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch480-matryo_load_matryo_216-0.pth'
 # ckpt_path = '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch480-matryo_load_matryo_216_reinit-0.pth'
 # ckpt_path = '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch480-matryo_load_matryo_216_param-fc-gaus-no-share-0.pth'
-ckpt_path = '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch480-matryo_load_matryo_216_param-fc-wb-gaus-no-share-1e-4-decay005-0.pth'
-
+# ckpt_path = '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch480-matryo_load_matryo_216_param-fc-wb-gaus-no-share-1e-4-decay005-0.pth'
+ckpt_path = '/OUTPUT_PATH/checkpoint-lr001-supernet-init-0.pth'
+# ckpt_path = '/OUTPUT_PATH/checkpoint-original-25.pth'
 
 
 
@@ -47,7 +58,7 @@ ckpt = torch.load(ckpt_path, map_location='cpu')
 model.load_state_dict(ckpt['model'], strict=False)
 
 # ==== 3. 저장 경로 설정 ====
-output_dir = './layer_weight_heatmaps/supernet-checkpoint_original_check_only192_original_optimizer-epoch480-matryo_load_matryo_216_param-fc-wb-gaus-no-share-1e-4-decay005-0'
+output_dir = './layer_weight_heatmaps/checkpoint-lr001-supernet-init-0'
 os.makedirs(output_dir, exist_ok=True)
 
 # ==== 4. 시각화 함수 ====

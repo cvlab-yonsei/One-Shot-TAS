@@ -87,53 +87,53 @@ class LayerNormSuper(nn.LayerNorm):
         # if case_num is not None:
         #     init_split_parameters_with_gaussian(self.split_bias)
 
-        ##############################
+        # ##############################
 
-        # 🔹 weight alignment
-        with torch.no_grad():
-            mask = torch.zeros_like(weight, dtype=torch.bool)
-            offset = 0
-            for i in range(len(dim0_sizes)):
-                w = self.split_weights[f'w_{i+1}']
-                L = w.shape[0]
-                requires_grad = w.requires_grad
-                mask[offset:offset + L] = requires_grad
-                offset += L
+        # # 🔹 weight alignment
+        # with torch.no_grad():
+        #     mask = torch.zeros_like(weight, dtype=torch.bool)
+        #     offset = 0
+        #     for i in range(len(dim0_sizes)):
+        #         w = self.split_weights[f'w_{i+1}']
+        #         L = w.shape[0]
+        #         requires_grad = w.requires_grad
+        #         mask[offset:offset + L] = requires_grad
+        #         offset += L
 
-            W_true = weight[mask]
-            W_false = weight[~mask]
+        #     W_true = weight[mask]
+        #     W_false = weight[~mask]
 
-            if W_true.numel() > 0 and W_false.numel() > 0:
-                mean_true = W_true.norm(p=2) / W_true.numel()
-                mean_false = W_false.norm(p=2) / W_false.numel()
-                λ = (mean_false / mean_true).detach()
-                # λ = (mean_false / (mean_true + 1e-8)).clamp(min=0.1, max=5.0).detach()
+        #     if W_true.numel() > 0 and W_false.numel() > 0:
+        #         mean_true = W_true.norm(p=2) / W_true.numel()
+        #         mean_false = W_false.norm(p=2) / W_false.numel()
+        #         λ = (mean_false / mean_true).detach()
+        #         # λ = (mean_false / (mean_true + 1e-8)).clamp(min=0.1, max=5.0).detach()
 
-                weight[mask] *= λ
+        #         weight[mask] *= λ
 
-        # 🔹 bias alignment
-        with torch.no_grad():
-            mask = torch.zeros_like(bias, dtype=torch.bool)
-            offset = 0
-            for i in range(len(dim0_sizes)):
-                b = self.split_bias[f'bias_{i+1}']
-                L = b.shape[0]
-                requires_grad = b.requires_grad
-                mask[offset:offset + L] = requires_grad
-                offset += L
+        # # 🔹 bias alignment
+        # with torch.no_grad():
+        #     mask = torch.zeros_like(bias, dtype=torch.bool)
+        #     offset = 0
+        #     for i in range(len(dim0_sizes)):
+        #         b = self.split_bias[f'bias_{i+1}']
+        #         L = b.shape[0]
+        #         requires_grad = b.requires_grad
+        #         mask[offset:offset + L] = requires_grad
+        #         offset += L
 
-            B_true = bias[mask]
-            B_false = bias[~mask]
+        #     B_true = bias[mask]
+        #     B_false = bias[~mask]
 
-            if B_true.numel() > 0 and B_false.numel() > 0:
-                mean_true = B_true.abs().mean()
-                mean_false = B_false.abs().mean()
-                λ = (mean_false / mean_true).detach()
-                # λ = (mean_false / (mean_true + 1e-8)).clamp(min=0.1, max=5.0).detach()
+        #     if B_true.numel() > 0 and B_false.numel() > 0:
+        #         mean_true = B_true.abs().mean()
+        #         mean_false = B_false.abs().mean()
+        #         λ = (mean_false / mean_true).detach()
+        #         # λ = (mean_false / (mean_true + 1e-8)).clamp(min=0.1, max=5.0).detach()
 
-                bias[mask] *= λ
+        #         bias[mask] *= λ
 
-        ##############################
+        # ##############################
 
         self.samples['weight'] = weight[:self.sample_embed_dim]
         self.samples['bias'] = bias[:self.sample_embed_dim]
