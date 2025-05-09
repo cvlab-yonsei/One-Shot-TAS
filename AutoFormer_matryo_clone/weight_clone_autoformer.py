@@ -36,6 +36,8 @@ def copy_case2_parameters(model, model_matryo):
 
     with torch.no_grad():
         for name, module in matryo_modules.items():
+            if 'head' in name:
+                continue
 
             # --- 일반 weight 복사 (split_weights[w1], w_1, w1_1) ---
             if hasattr(module, 'split_weights') and isinstance(module.split_weights, nn.ParameterDict):
@@ -43,6 +45,9 @@ def copy_case2_parameters(model, model_matryo):
                 if weight_name not in model_dict:
                     continue
                 full_weight = model_dict[weight_name].data
+
+                if 'head' in name:
+                    continue
 
                 offset = 0
                 for key, split_param in module.split_weights.items():
@@ -83,6 +88,9 @@ def copy_case2_parameters(model, model_matryo):
                 if bias_name not in model_dict:
                     continue
                 full_bias = model_dict[bias_name].data
+
+                if 'head' in name:
+                    continue
 
                 offset = 0
                 for i in range(len(module.split_bias)):

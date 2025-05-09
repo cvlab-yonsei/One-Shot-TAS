@@ -444,61 +444,58 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
     # for key in self.split_weights:
     #     print(f"  {key:10s} -> {self.split_weights[key].requires_grad}")
 
-    # #################################
-    # # if name == 'head':
-    # # 걍 모든 종류에 대해서
-    # with torch.no_grad():
-    #     # 1. requires_grad=False 영역 마스크로 W_false 구함
-    #     full_mask = torch.zeros_like(full_weight, dtype=torch.bool)
-    #     row_offset = 0
-    #     for i in range(len(dim0_splits)):
-    #         col_offset = 0
-    #         for j in range(len(dim1_splits)):
-    #             key = f'w{i+1}_{j+1}'
-    #             block = self.split_weights[key]
-    #             h, w = block.shape
-    #             if block.requires_grad:
-    #                 full_mask[row_offset:row_offset + h, col_offset:col_offset + w] = True
-    #             col_offset += w
-    #         row_offset += h
+    #################################
+    # if name == 'head':
+    # 걍 모든 종류에 대해서
+    with torch.no_grad():
+        # 1. W_false 통합 계산
+        full_mask = torch.zeros_like(full_weight, dtype=torch.bool)
+        row_offset = 0
+        for i in range(len(dim0_splits)):
+            col_offset = 0
+            for j in range(len(dim1_splits)):
+                key = f'w{i+1}_{j+1}'
+                block = self.split_weights[key]
+                h, w = block.shape
+                requires_grad = block.requires_grad
+                full_mask[row_offset:row_offset + h, col_offset:col_offset + w] = requires_grad
+                col_offset += w
+            row_offset += h
 
-    #     W_false = full_weight[~full_mask]
-    #     min_false = W_false.min()
-    #     max_false = W_false.max()
+        W_false = full_weight[~full_mask]
+        mean_false = W_false.norm(p=2) / W_false.numel()
 
-    #     # 2. 각 블록 min-max scaling
-    #     offset_row = 0
-    #     for i in range(len(dim0_splits)):
-    #         offset_col = 0
-    #         for j in range(len(dim1_splits)):
-    #             key = f'w{i+1}_{j+1}'
-    #             block = self.split_weights[key]
-    #             h, w = block.shape
-    #             if block.requires_grad:
-    #                 current_block = full_weight[offset_row:offset_row + h, offset_col:offset_col + w]
-    #                 block_min = current_block.min()
-    #                 block_max = current_block.max()
-    #                 scale = (max_false - min_false) / (block_max - block_min + 1e-8)
-    #                 shift = min_false - block_min * scale
+        # 2. 각 requires_grad=True인 블록마다 개별 λ 적용
+        # 개별 block별로 requires_grad=True에 대해 λ 계산 및 scaling 적용
+        offset_row = 0
+        for i in range(len(dim0_splits)):
+            offset_col = 0
+            for j in range(len(dim1_splits)):
+                key = f'w{i+1}_{j+1}'
+                block = self.split_weights[key]
+                h, w = block.shape
+                if block.requires_grad:
+                    current_block = full_weight[offset_row:offset_row + h, offset_col:offset_col + w]
+                    mean_true = current_block.norm(p=2) / current_block.numel()
+                    λ = (mean_false / (mean_true + 1e-8)).detach()
+                    if torch.isnan(λ):
+                        print("name : ", name)
+                        print("key : ", key)
+                        print("W_false.numel() : ", W_false.numel())
+                        print(f"[⚠️ NaN λ] mean_false: {mean_false.item():.6f}, mean_true: {mean_true.item():.6f}")
 
-    #                 # in-place scaling
-    #                 current_block.mul_(scale).add_(shift)
+                    # ✔ 저장
+                    self.lambda_log[key] = λ.item()
 
-    #                 # 로그 저장
-    #                 self.lambda_log[key] = {
-    #                     'scale': scale.item(),
-    #                     'shift': shift.item(),
-    #                     'block_min': block_min.item(),
-    #                     'block_max': block_max.item()
-    #                 }
+                    full_weight[offset_row:offset_row + h, offset_col:offset_col + w] *= λ
+                offset_col += w
+            offset_row += h
 
-    #             offset_col += w
-    #         offset_row += h
 
-    # # 자르기
-    # sample_weight = full_weight[:sample_out_dim, :sample_in_dim]
+    # 잘라내기
+    sample_weight = full_weight[:sample_out_dim, :sample_in_dim]
 
-    # ##############################
+    ##############################
 
     return sample_weight
 
@@ -512,7 +509,6 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
     choices = self.choices
 
     sample_bias = []
-    full_bias = []
     
     if name in ['fc1', 'fc2']:
         embed_dims = sorted(set(choices['embed_dim']))
@@ -571,7 +567,7 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
 
         
 
-        # return sample_bias
+        return sample_bias
 
     elif name == 'head':
         # self.split_bias['bias'].requires_grad = True
@@ -620,7 +616,7 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
 
         full_bias = torch.cat(collected_bias, dim=0)
         sample_bias = full_bias[:sample_out_dim]
-        # return sample_bias
+        return sample_bias
 
     elif name == 'proj':
         embed_dims = sorted(set(choices['embed_dim']))
@@ -654,57 +650,46 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
         full_bias = torch.cat(collected_bias, dim=0)
         sample_bias = full_bias[:sample_out_dim]
 
-        # return sample_bias
+        return sample_bias
     
-    # ####################################
-    # # 🔹 alignment 삽입 (개별 min-max 정규화 방식)
-    # with torch.no_grad():
-    #     # 전체 full_bias에서 requires_grad=False 영역 기준 min/max 계산
-    #     mask = torch.zeros_like(full_bias, dtype=torch.bool)
-    #     offset = 0
-    #     for i in range(len(dim0_sizes)):
-    #         key = f'bias_{i+1}'
-    #         block = self.split_bias[key]
-    #         length = block.shape[0]
-    #         if block.requires_grad:
-    #             mask[offset:offset + length] = True
-    #         offset += length
+    ####################################
+    # 🔹 alignment 삽입 (개별 정규화 방식)
+    with torch.no_grad():
+        # 먼저 전체 full_bias에서 requires_grad=False 영역 기준 평균 계산
+        mask = torch.zeros_like(full_bias, dtype=torch.bool)
+        offset = 0
+        for i in range(len(dim0_sizes)):
+            key = f'bias_{i+1}'
+            block = self.split_bias[key]
+            length = block.shape[0]
+            requires_grad = block.requires_grad
+            mask[offset:offset + length] = requires_grad
+            offset += length
 
-    #     bias_false = full_bias[~mask]
-    #     min_false = bias_false.min()
-    #     max_false = bias_false.max()
+        bias_false = full_bias[~mask]
+        mean_false = bias_false.abs().mean()
 
-    #     # 각 requires_grad=True 블록에 대해 min-max scaling 적용
-    #     offset = 0
-    #     for i in range(len(dim0_sizes)):
-    #         key = f'bias_{i+1}'
-    #         block = self.split_bias[key]
-    #         length = block.shape[0]
-    #         if block.requires_grad:
-    #             current_block = full_bias[offset:offset + length]
-    #             block_min = current_block.min()
-    #             block_max = current_block.max()
+        # 개별 block별로 requires_grad=True에 대해 λ 계산 및 scaling 적용
+        offset = 0
+        for i in range(len(dim0_sizes)):
+            key = f'bias_{i+1}'
+            block = self.split_bias[key]
+            length = block.shape[0]
+            if block.requires_grad:
+                current_block = full_bias[offset:offset + length]
+                mean_true = current_block.abs().mean()
+                λ = (mean_false / (mean_true + 1e-8)).detach()
 
-    #             scale = (max_false - min_false) / (block_max - block_min + 1e-8)
-    #             shift = min_false - block_min * scale
+                # ✔ 저장
+                self.lambda_log[key] = λ.item()
 
-    #             current_block.mul_(scale).add_(shift)
+                full_bias[offset:offset + length] *= λ
+            offset += length
 
-    #             # ✔ 로그 저장
-    #             self.lambda_log[key] = {
-    #                 'scale': scale.item(),
-    #                 'shift': shift.item(),
-    #                 'block_min': block_min.item(),
-    #                 'block_max': block_max.item()
-    #             }
-
-    #         offset += length
-
-    # # 마지막 슬라이스
-    # sample_bias = full_bias[:sample_out_dim]
-    # return sample_bias
-    # ####################################
-
+    # 마지막 슬라이스
+    sample_bias = full_bias[:sample_out_dim]
+    return sample_bias
+    ####################################
 
     
     return sample_bias

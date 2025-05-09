@@ -14,9 +14,6 @@ from lib import utils
 import random
 import time
 
-from weight_clone_autoformer import copy_case2_parameters
-
-
 # def manual_lr_schedule(epoch, start_epoch=400, total_epochs=80, start_lr=1e-5, min_lr=1e-6):
 #     effective_epoch = epoch - start_epoch
 #     if effective_epoch < 0 or effective_epoch >= total_epochs:
@@ -307,20 +304,8 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             avg_grad = total_norm / (count if count > 0 else 1)
             print(f"[Epoch {epoch}] Avg Grad Norm: {avg_grad:.6f}")
 
-            # 🔸 blocks.1, blocks.11, blocks.12 에 대해 lambda_log 출력
-            target_blocks = {'blocks.1', 'blocks.11', 'blocks.12'}
-
-            for name, module in model.module.named_modules():
-                if any(f'blocks.{idx}' in name for idx in [1, 11, 12]):
-                    if hasattr(module, 'lambda_log') and isinstance(module.lambda_log, dict):
-                        if len(module.lambda_log) > 0:
-                            lambda_str = ', '.join([
-                                f"{k}: (s: {v['scale']:.4f}, sh: {v['shift']:.4f})"
-                                for k, v in module.lambda_log.items()
-                                if isinstance(v, dict)
-                            ])
-                            print(f"[{name}] λ: {lambda_str}")
-
+            # # 🔸 blocks.1, blocks.11, blocks.12 에 대해 lambda_log 출력
+            # target_blocks = {'blocks.1', 'blocks.11', 'blocks.12'}
 
             # for name, module in model.module.named_modules():
             #     if any(f'blocks.{idx}' in name for idx in [1, 11, 12]):
