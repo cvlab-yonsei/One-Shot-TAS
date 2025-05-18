@@ -186,6 +186,21 @@ python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train_l
 --resume '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch480-24.pth' --output /OUTPUT_PATH --batch-size 128 \
 --save_checkpoint_path 'checkpoint-lr0002-BC-no-A-40epoch-' --save_log_path './log/supernet_lr0002_bc_no_a_40epoch.log'
 
+python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train_load_matryo_216_240_BCinit.py --data-path '/dataset/ILSVRC2012' --gp \
+--change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 40 --warmup-epochs 0 \
+--resume '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch480-24.pth' --resume2 '/OUTPUT_PATH/checkpoint-lr0002-BC-no-A-40epoch-4.pth' --output /OUTPUT_PATH --batch-size 128 \
+--save_checkpoint_path 'checkpoint-lr0002-BC-no-A-40epoch-ABC-' --save_log_path './log/supernet_lr0002_bc_no_a_40epoch_ABC.log'
+
+python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train_load_matryo_216_240_BCinit.py --data-path '/dataset/ILSVRC2012' --gp \
+--change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 40 --warmup-epochs 0 \
+--resume '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch480-24.pth' --resume2 '/OUTPUT_PATH/checkpoint-lr0002-BC-no-A-40epoch-4.pth' --output /OUTPUT_PATH --batch-size 128 \
+--save_checkpoint_path 'checkpoint-lr0002-BC-no-A-40epoch-ABC-head-freeze-' --save_log_path './log/supernet_lr0002_bc_no_a_40epoch_ABC_head_freeze.log'
+
+python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train_load_matryo_240.py --data-path '/data' --gp \
+--change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 40 --warmup-epochs 0 \
+--resume '/OUTPUT_PATH/checkpoint-original-only192216-training-24.pth' --output /OUTPUT_PATH --batch-size 128 \
+--save_checkpoint_path 'checkpoint-original-only192216-training-only240-lr0002-' --save_log_path './log/supernet_original_only192216_training_only240_lr0002.log'
+
 
 # python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train_load_matryo_216_240_superinit.py --data-path '/dataset/ILSVRC2012' --gp \
 # --change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 40 --warmup-epochs 0 \
