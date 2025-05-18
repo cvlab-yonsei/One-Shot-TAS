@@ -228,7 +228,7 @@ def evaluate(data_loader, model, device, amp=True, choices=None, mode='super', r
         
         # config = {'layer_num': 14, 'mlp_ratio': [4.0, 4.0, 3.5, 4.0, 3.5, 3.5, 3.5, 3.5, 4.0, 4.0, 3.5, 3.5, 3.5, 3.5], 'num_heads': [3, 3, 4, 4, 3, 3, 4, 4, 4, 4, 4, 3, 4, 3], 'embed_dim': [240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240]}
         
-        if epoch % 2 == 1:
+        if epoch % 2 == 0:
             config = {
                 'layer_num': 13,
                 'mlp_ratio': [4.0, 3.5, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 3.5, 3.5, 4.0, 3.5, 3.5],
