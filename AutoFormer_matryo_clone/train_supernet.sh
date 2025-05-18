@@ -20,6 +20,6 @@
 
 
 python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train.py --data-path '/data' --gp \
---change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 50 --warmup-epochs 2 \
+--change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 100 --warmup-epochs 4 \
 --resume '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch400-20.pth' --output /OUTPUT_PATH --batch-size 128 \
---save_checkpoint_path 'checkpoint_original_check_only192_original_optimizer-epoch400-after-matryo-' --save_log_path './log/supernet_original_check_only192_original_optimizer-epoch400-after-matryo.log'
+--save_checkpoint_path 'checkpoint_original_check_only192_original_optimizer-epoch400-after-matryo-exp_super_change-all-freeze-include-layernorm-random-depth-' --save_log_path './log/supernet_original_check_only192_original_optimizer-epoch400-after-matryo-exp-super-change-all-freeze-include-layernorm-random-depth.log'

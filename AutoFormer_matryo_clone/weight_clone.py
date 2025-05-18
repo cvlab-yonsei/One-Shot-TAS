@@ -116,8 +116,8 @@ def init_model_matryo_from_model(model, model_matryo):
                         continue
 
                     full_bias = model_dict[base_name]
-                    print("full_bias shape : ", full_bias.shape)
-                    print("bias_param shape : ", bias_param.shape)
+                    # print("full_bias shape : ", full_bias.shape)
+                    # print("bias_param shape : ", bias_param.shape)
                     h = bias_param.shape[0]
                     cropped = full_bias[:h]
                     bias_param.copy_(cropped)

@@ -1,3 +1,7 @@
+# python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train.py --data-path '/data' --gp \
+# --change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 480 --warmup-epochs 19 \
+# --output /OUTPUT_PATH --batch-size 128 
+
 python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train.py --data-path '/data' --gp \
---change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 500 --warmup-epochs 20 \
---output /OUTPUT_PATH --batch-size 128 
+--change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --epochs 500 --warmup-epochs 19 \
+--resume '/OUTPUT_PATH/checkpoint-original-only192216-training-24.pth' --output /OUTPUT_PATH --batch-size 128 
