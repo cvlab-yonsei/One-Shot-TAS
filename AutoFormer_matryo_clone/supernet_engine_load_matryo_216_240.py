@@ -73,7 +73,8 @@ def sample_configs_curriculum(choices, epoch=None, curriculum_epoch=None):
 
     elif epoch >= curriculum_epoch[1] and epoch < curriculum_epoch[2]:
         # config['embed_dim'] = [216] * depth
-        embed_dim_choice = random.choice([216, 240])
+        # embed_dim_choice = random.choice([216, 240])
+        embed_dim_choice = random.choices([216, 240], weights=[1, 3])[0]
         config['embed_dim'] = [embed_dim_choice] * depth
         config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 1])[0] for _ in range(depth)]
         config['num_heads'] = [random.choices([3, 4], weights=[1, 1])[0] for _ in range(depth)]

@@ -148,7 +148,12 @@
 # --resume '/OUTPUT_PATH/checkpoint_original_check_only192_original_optimizer-epoch480-24.pth' --output /OUTPUT_PATH --batch-size 128 \
 # --save_checkpoint_path 'checkpoint-soft-freeze-216-240-gaussian-' --save_log_path './log/supernet_soft_freeze_216_240_gaussian.log'
 
-python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution.py --data-path '/dataset/ILSVRC2012' --gp \
---change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint_original_check_only192-no-share-2e-4-decay0001-BC-4.pth' \
---min-param-limits 7 --param-limits 8 \
---log-file-path './log/search-checkpoint_original_check_only192-no-share-2e-4-decay0001-BC-4-8M-4.log'
+# python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution.py --data-path '/dataset/ILSVRC2012' --gp \
+# --change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint_original_check_only192-no-share-2e-4-decay0001-BC-4.pth' \
+# --min-param-limits 7 --param-limits 8 \
+# --log-file-path './log/search-checkpoint_original_check_only192-no-share-2e-4-decay0001-BC-4-8M-4.log'
+
+python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution_original.py --data-path '/dataset/ILSVRC2012' --gp \
+--change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint-original-only192216-training-24.pth' \
+--min-param-limits 5 --param-limits 6 \
+--log-file-path './log/search-checkpoint-original-only192216-training-24-6M.log'

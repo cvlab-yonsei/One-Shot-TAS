@@ -574,12 +574,12 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
         # return sample_bias
 
     elif name == 'head':
-        self.split_bias['bias'].requires_grad = True
+        # self.split_bias['bias'].requires_grad = True
 
-        # ## freeze를 확실히 할거면 아래가 맞음
-        # if case_num is not None:
-        #     if case_num != 1:
-        #         self.split_bias['bias'].requires_grad = False
+        ## freeze를 확실히 할거면 아래가 맞음
+        if case_num is not None:
+            if case_num != 1:
+                self.split_bias['bias'].requires_grad = False
             
         sample_bias = self.split_bias['bias'][:sample_out_dim]
 

@@ -330,19 +330,19 @@ def main(args):
     # 4. model_super → model_matryo 파라미터 이식
     init_model_matryo_from_model(model_super, model_matryo)
 
-    # 이때 model_matryo 그 set_sample_config 해서 requires_grad 바꿔야돼. case_num = 2
-    case_num = 2
-    config = {}
-    depth = 14
-    config['embed_dim'] = [240] * depth
-    config['mlp_ratio'] = [4.0] * depth
-    config['num_heads'] = [4] * depth
-    config['layer_num'] = depth
+    # # 이때 model_matryo 그 set_sample_config 해서 requires_grad 바꿔야돼. case_num = 2
+    # case_num = 2
+    # config = {}
+    # depth = 14
+    # config['embed_dim'] = [240] * depth
+    # config['mlp_ratio'] = [4.0] * depth
+    # config['num_heads'] = [4] * depth
+    # config['layer_num'] = depth
 
-    model_module = unwrap_model(model_matryo)
-    model_module.set_sample_config(config=config, case_num=case_num)
+    # model_module = unwrap_model(model_matryo)
+    # model_module.set_sample_config(config=config, case_num=case_num)
 
-    zero_out_frozen_parameters(model_matryo)
+    # zero_out_frozen_parameters(model_matryo)
 
 
     # 5. model 변수 자체를 matryo로 바꾸기
