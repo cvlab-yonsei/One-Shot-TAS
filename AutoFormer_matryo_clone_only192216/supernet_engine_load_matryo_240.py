@@ -116,6 +116,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     if epoch in curriculum_epoch:
         case_num = curriculum_epoch.index(epoch) + 1
 
+    case_num = 3
     print("case_num : ", case_num)
 
     # # 2. requires_grad=True인 파라미터들만 모아서 확인

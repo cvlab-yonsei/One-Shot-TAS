@@ -53,20 +53,20 @@ class RelativePosition2D_super(nn.Module):
         #     self.split_embeddings_v[f'w{i+1}'].requires_grad = not freeze
         #     self.split_embeddings_h[f'w{i+1}'].requires_grad = not freeze
         if case_num is not None:
-            # if case_num == 1:
-            #     true_label = [(1)]
-            # elif case_num == 2:
-            #     true_label = [(1)]
-            # elif case_num == 3:
-            #     true_label = [(1)]
-
-            ## freeze 확실하게는 아래 코드
             if case_num == 1:
-                true_label = [()]
+                true_label = [(1)]
             elif case_num == 2:
-                true_label = [()]
+                true_label = [(1)]
             elif case_num == 3:
-                true_label = [()]
+                true_label = [(1)]
+
+            # ## freeze 확실하게는 아래 코드
+            # if case_num == 1:
+            #     true_label = [()]
+            # elif case_num == 2:
+            #     true_label = [()]
+            # elif case_num == 3:
+            #     true_label = [()]
 
             for i in range(len(self.dim1_splits)):
                 self.split_embeddings_v[f'w{i+1}'].requires_grad = ((i + 1) in true_label)
