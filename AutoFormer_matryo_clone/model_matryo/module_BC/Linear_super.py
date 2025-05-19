@@ -523,22 +523,22 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
             dim0_sizes = sorted({int(e * r) for e in embed_dims for r in mlp_ratios})
             dim0_sizes += [self.super_out_dim]
             if case_num is not None:
-                # if case_num == 1:
-                #     true_label = [(1)]
-                # elif case_num == 2:
-                #     # true_label = [(2), (3)]
-                #     true_label = [(2), (3), (4), (5), (6)]
-                # elif case_num == 3:
-                #     true_label = [(4), (5), (6)]
-
-                ## freeze를 확실히 하려면 이게 맞음.
-                if case_num == 1: 
-                    true_label = [(1), (2), (3)]
+                if case_num == 1:
+                    true_label = [(1)]
                 elif case_num == 2:
-                    # true_label = [(4), (5)]
-                    true_label = [(4), (5), (6)]
+                    # true_label = [(2), (3)]
+                    true_label = [(2), (3), (4), (5), (6)]
                 elif case_num == 3:
-                    true_label = [(6)]
+                    true_label = [(4), (5), (6)]
+
+                # ## freeze를 확실히 하려면 이게 맞음.
+                # if case_num == 1: 
+                #     true_label = [(1), (2), (3)]
+                # elif case_num == 2:
+                #     # true_label = [(4), (5)]
+                #     true_label = [(4), (5), (6)]
+                # elif case_num == 3:
+                #     true_label = [(6)]
         else:
             dim0_sizes = embed_dims + [self.super_out_dim]
             if case_num is not None:
@@ -574,12 +574,12 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
         # return sample_bias
 
     elif name == 'head':
-        # self.split_bias['bias'].requires_grad = True
+        self.split_bias['bias'].requires_grad = True
 
-        ## freeze를 확실히 할거면 아래가 맞음
-        if case_num is not None:
-            if case_num != 1:
-                self.split_bias['bias'].requires_grad = False
+        # ## freeze를 확실히 할거면 아래가 맞음
+        # if case_num is not None:
+        #     if case_num != 1:
+        #         self.split_bias['bias'].requires_grad = False
             
         sample_bias = self.split_bias['bias'][:sample_out_dim]
 
