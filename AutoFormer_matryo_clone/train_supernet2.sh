@@ -153,7 +153,27 @@
 # --min-param-limits 7 --param-limits 8 \
 # --log-file-path './log/search-checkpoint_original_check_only192-no-share-2e-4-decay0001-BC-4-8M-4.log'
 
+# python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution_original.py --data-path '/dataset/ILSVRC2012' --gp \
+# --change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint-original-only192216-training-24.pth' \
+# --min-param-limits 5 --param-limits 6 \
+# --log-file-path './log/search-checkpoint-original-only192216-training-24-6M.log'
+
+# python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution.py --data-path '/dataset/ILSVRC2012' --gp \
+# --change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint-original-only192216-training-300-460-216-1-0-240-1-1-lr00005-allfreeze-4.pth' \
+# --min-param-limits 7 --param-limits 8 \
+# --log-file-path './log/search-checkpoint-original-only192216-training-300-460-216-1-0-240-1-1-lr00005-allfreeze-4-8M.log'
+
+# python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution_original.py --data-path '/dataset/ILSVRC2012' --gp \
+# --change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint-original-only192216-training-300-460-23.pth' \
+# --min-param-limits 7 --param-limits 8 \
+# --log-file-path './log/search_original-only192216-training-300-460-23-8M.log'
+
 python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution_original.py --data-path '/dataset/ILSVRC2012' --gp \
 --change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint-original-only192216-training-24.pth' \
---min-param-limits 5 --param-limits 6 \
---log-file-path './log/search-checkpoint-original-only192216-training-24-6M.log'
+--min-param-limits 7 --param-limits 8 \
+--log-file-path './log/search-checkpoint-original-only192216-training-24-8M.log'
+
+# python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution_original.py --data-path '/dataset/ILSVRC2012' --gp \
+# --change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint-original-only192216-training-23.pth' \
+# --min-param-limits 5 --param-limits 6 \
+# --log-file-path './log/search-checkpoint-original-only192216-training-23-6M.log'

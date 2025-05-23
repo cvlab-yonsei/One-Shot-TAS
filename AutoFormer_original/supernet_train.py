@@ -26,7 +26,7 @@ import warnings
 # UserWarning 무시
 warnings.filterwarnings("ignore", category=UserWarning)
 
-sys.stdout = open('./log/supernet_original_only192216_training_test.log', 'w')
+sys.stdout = open('./log/supernet_original_only192216_training_test_300_460_480_500_11.log', 'w')
 sys.stderr = sys.stdout
 
 
@@ -88,8 +88,8 @@ def get_args_parser():
     # Learning rate schedule parameters
     parser.add_argument('--sched', default='cosine', type=str, metavar='SCHEDULER',
                         help='LR scheduler (default: "cosine"')
-    parser.add_argument('--lr', type=float, default=5e-4, metavar='LR',
-                        help='learning rate (default: 5e-4)')
+    parser.add_argument('--lr', type=float, default=0.000025, metavar='LR',
+                        help='learning rate (default: 5e-4)') # 5e-4 -> 0.000025
     parser.add_argument('--lr-noise', type=float, nargs='+', default=None, metavar='pct, pct',
                         help='learning rate noise on/off epoch percentages')
     parser.add_argument('--lr-noise-pct', type=float, default=0.67, metavar='PERCENT',
@@ -98,8 +98,8 @@ def get_args_parser():
                         help='learning rate noise std-dev (default: 1.0)')
     parser.add_argument('--warmup-lr', type=float, default=1e-6, metavar='LR',
                         help='warmup learning rate (default: 1e-6)')
-    parser.add_argument('--min-lr', type=float, default=1e-5, metavar='LR',
-                        help='lower lr bound for cyclic schedulers that hit 0 (1e-5)')
+    parser.add_argument('--min-lr', type=float, default=0.00001, metavar='LR',
+                        help='lower lr bound for cyclic schedulers that hit 0 (1e-5)') # 1e-5 -> 0.00001
     parser.add_argument('--lr-power', type=float, default=1.0,
                         help='power of the polynomial lr scheduler')
 
@@ -331,9 +331,9 @@ def main(args):
             checkpoint = torch.load(args.resume, map_location='cpu')
         model_without_ddp.load_state_dict(checkpoint['model'])
         if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
-            optimizer.load_state_dict(checkpoint['optimizer'])
-            lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
-            args.start_epoch = checkpoint['epoch'] + 1
+            # optimizer.load_state_dict(checkpoint['optimizer'])
+            # lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
+            # args.start_epoch = checkpoint['epoch'] + 1
             if 'scaler' in checkpoint:
                 loss_scaler.load_state_dict(checkpoint['scaler'])
             if args.model_ema:
@@ -368,7 +368,7 @@ def main(args):
         lr_scheduler.step(epoch)
         if args.output_dir:
             # checkpoint_paths = [output_dir / 'checkpoint.pth']
-            checkpoint_paths = [output_dir / ('checkpoint-original-only192216-training-300-460-' + str((epoch+1)//20) + '.pth')]
+            checkpoint_paths = [output_dir / ('checkpoint-original-only192216-training-300-460-500-11-' + str((epoch+1)//20) + '.pth')]
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({
                     'model': model_without_ddp.state_dict(),

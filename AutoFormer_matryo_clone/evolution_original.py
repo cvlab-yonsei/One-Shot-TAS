@@ -137,7 +137,7 @@ class EvolutionSearcher(object):
         choices = {
             'num_heads': [3, 4],
             'mlp_ratio': [3.5, 4.0],
-            'embed_dim': [192],
+            'embed_dim': [216],
             'depth': [12, 13, 14]
         }
         # choices = {
