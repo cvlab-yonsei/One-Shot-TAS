@@ -137,7 +137,7 @@ class EvolutionSearcher(object):
         choices = {
             'num_heads': [3, 4],
             'mlp_ratio': [3.5, 4.0],
-            'embed_dim': [216],
+            'embed_dim': [240],
             'depth': [12, 13, 14]
         }
         # choices = {
@@ -592,7 +592,7 @@ def main(args):
         model_without_ddp.load_state_dict(checkpoint['model'])
 
     choices = {'num_heads': cfg.SEARCH_SPACE.NUM_HEADS, 'mlp_ratio': cfg.SEARCH_SPACE.MLP_RATIO,
-               'embed_dim': [216] , 'depth': cfg.SEARCH_SPACE.DEPTH}
+               'embed_dim': [240] , 'depth': cfg.SEARCH_SPACE.DEPTH}
     
     t = time.time()
     searcher = EvolutionSearcher(args, device, model, model_without_ddp, choices, data_loader_val, data_loader_test, args.output_dir)

@@ -10,23 +10,6 @@ def softmax(x, dim, onnx_trace=False):
         return F.softmax(x.float(), dim=dim)
     else:
         return F.softmax(x, dim=dim, dtype=torch.float32)
-    
-
-def uniform_element_selection(tensor, target_dim, dim):
-    """
-    Uniformly selects elements from the tensor along the specified dimension.
-    
-    Parameters:
-    tensor (torch.Tensor): The input tensor.
-    target_dim (int): The target dimension size.
-    dim (int): The dimension along which to select elements.
-    
-    Returns:
-    torch.Tensor: A tensor with the selected elements.
-    """
-    original_dim = tensor.size(dim)
-    indices = torch.linspace(0, original_dim - 1, target_dim).long().to(tensor.device)
-    return tensor.index_select(dim, indices)
 
 class RelativePosition2D_super(nn.Module):
 
@@ -45,16 +28,11 @@ class RelativePosition2D_super(nn.Module):
         self.sample_head_dim = None
         self.sample_embeddings_table_h = None
         self.sample_embeddings_table_v = None
-        
+
     def set_sample_config(self, sample_head_dim):
         self.sample_head_dim = sample_head_dim
-        self.sample_embeddings_table_h = uniform_element_selection(self.embeddings_table_h, sample_head_dim, dim=1)
-        self.sample_embeddings_table_v = uniform_element_selection(self.embeddings_table_v, sample_head_dim, dim=1)
-
-    # def set_sample_config(self, sample_head_dim):
-    #     self.sample_head_dim = sample_head_dim
-    #     self.sample_embeddings_table_h = self.embeddings_table_h[:,:sample_head_dim]
-    #     self.sample_embeddings_table_v = self.embeddings_table_v[:,:sample_head_dim]
+        self.sample_embeddings_table_h = self.embeddings_table_h[:,:sample_head_dim]
+        self.sample_embeddings_table_v = self.embeddings_table_v[:,:sample_head_dim]
 
     def calc_sampled_param_num(self):
         return self.sample_embeddings_table_h.numel() + self.sample_embeddings_table_v.numel()
@@ -63,8 +41,9 @@ class RelativePosition2D_super(nn.Module):
         # remove the first cls token distance computation
         length_q = length_q - 1
         length_k = length_k - 1
-        range_vec_q = torch.arange(length_q)
-        range_vec_k = torch.arange(length_k)
+        device = self.embeddings_table_v.device
+        range_vec_q = torch.arange(length_q, device=device)
+        range_vec_k = torch.arange(length_k, device=device)
         # compute the row and column distance
         distance_mat_v = (range_vec_k[None, :] // int(length_q ** 0.5 )  - range_vec_q[:, None] // int(length_q ** 0.5 ))
         distance_mat_h = (range_vec_k[None, :] % int(length_q ** 0.5 ) - range_vec_q[:, None] % int(length_q ** 0.5 ))
@@ -79,10 +58,8 @@ class RelativePosition2D_super(nn.Module):
         final_mat_v = torch.nn.functional.pad(final_mat_v, (1,0,1,0), "constant", 0)
         final_mat_h = torch.nn.functional.pad(final_mat_h, (1,0,1,0), "constant", 0)
 
-        # final_mat_v = torch.LongTensor(final_mat_v).cuda()
-        # final_mat_h = torch.LongTensor(final_mat_h).cuda()
-        final_mat_v = torch.LongTensor(final_mat_v)
-        final_mat_h = torch.LongTensor(final_mat_h)
+        final_mat_v = final_mat_v.long()
+        final_mat_h = final_mat_h.long()
         # get the embeddings with the corresponding distance
         embeddings = self.sample_embeddings_table_v[final_mat_v] + self.sample_embeddings_table_h[final_mat_h]
 
@@ -119,17 +96,15 @@ class AttentionSuper(nn.Module):
 
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj_drop = nn.Dropout(proj_drop)
-        
-        # 추가: 각 head의 attention map 저장을 위한 변수
-        self.last_attention_maps = None
-        self.cls_attn_map = None
 
     def set_sample_config(self, sample_q_embed_dim=None, sample_num_heads=None, sample_in_embed_dim=None):
+
         self.sample_in_embed_dim = sample_in_embed_dim
         self.sample_num_heads = sample_num_heads
         if not self.change_qkv:
             self.sample_qk_embed_dim = self.super_embed_dim
             self.sample_scale = (sample_in_embed_dim // self.sample_num_heads) ** -0.5
+
         else:
             self.sample_qk_embed_dim = sample_q_embed_dim
             self.sample_scale = (self.sample_qk_embed_dim // self.sample_num_heads) ** -0.5
@@ -139,7 +114,6 @@ class AttentionSuper(nn.Module):
         if self.relative_position:
             self.rel_pos_embed_k.set_sample_config(self.sample_qk_embed_dim // sample_num_heads)
             self.rel_pos_embed_v.set_sample_config(self.sample_qk_embed_dim // sample_num_heads)
-
     def calc_sampled_param_num(self):
 
         return 0
@@ -169,10 +143,6 @@ class AttentionSuper(nn.Module):
 
         attn = attn.softmax(dim=-1)
         attn = self.attn_drop(attn)
-        
-        # 저장: 현재 계산된 attention map 저장
-        self.last_attention_maps = attn.detach()
-        self.cls_attn_map = attn.detach()[:, :, 0, 2:] # class attention map
 
         x = (attn @ v).transpose(1,2).reshape(B, N, -1)
         if self.relative_position:
@@ -188,9 +158,3 @@ class AttentionSuper(nn.Module):
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
-    
-    def get_attention_maps(self):
-        return self.last_attention_maps
-    
-    def get_cls_attention_maps(self):
-        return self.cls_attn_map

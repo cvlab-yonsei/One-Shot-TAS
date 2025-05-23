@@ -20,6 +20,7 @@ import cv2
 from skimage.transform import resize
 from torchvision.transforms import ToPILImage
 from PIL import Image
+from torchvision import transforms
 from timm.models import create_model
 import torch.nn.functional as F
 from torchvision.transforms import Compose, Resize, CenterCrop, Normalize, ToTensor
@@ -84,30 +85,19 @@ def show_img2(img1, img2, alpha=0.8, filename='overlay.png'):
 def my_forward_wrapper(attn_obj):
     def my_forward(x):
         B, N, C = x.shape
-
-        qkv_out = attn_obj.qkv(x)  # [B, N, 3 * embed_dim]
-        total_dim = qkv_out.shape[-1]
-
-        assert total_dim % 3 == 0, f"Invalid qkv shape: {qkv_out.shape}"
-        embed_dim = total_dim // 3
-        assert embed_dim % attn_obj.num_heads == 0, f"embed_dim={embed_dim}, num_heads={attn_obj.num_heads} mismatch"
-        head_dim = embed_dim // attn_obj.num_heads
-
-        # 안전한 reshape
-        qkv = qkv_out.reshape(B, N, 3, attn_obj.num_heads, head_dim).permute(2, 0, 3, 1, 4)
-        q, k, v = qkv[0], qkv[1], qkv[2]
+        qkv = attn_obj.qkv(x).reshape(B, N, 3, attn_obj.num_heads, C // attn_obj.num_heads).permute(2, 0, 3, 1, 4)
+        q, k, v = qkv.unbind(0)   # make torchscript happy (cannot use tensor as tuple)
 
         attn = (q @ k.transpose(-2, -1)) * attn_obj.scale
         attn = attn.softmax(dim=-1)
+        attn = attn_obj.attn_drop(attn)
+        attn_obj.attn_map = attn
+        attn_obj.cls_attn_map = attn[:, :, 0, 1:]
 
-        # 저장
-        attn_obj.attn_map = attn.detach().cpu()
-        attn_obj.cls_attn_map = attn[:, :, 0, 1:].mean(dim=1).detach().cpu()
-
-        x = (attn @ v).transpose(1, 2).reshape(B, N, embed_dim)
+        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
         x = attn_obj.proj(x)
+        x = attn_obj.proj_drop(x)
         return x
-
     return my_forward
 
 
@@ -289,7 +279,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 @torch.no_grad()
-def evaluate(data_loader, model, device, image, amp=True, choices=None, net=None, mode='super', retrain_config=None):
+def evaluate(data_loader, model, device, image=None, amp=True, choices=None, net=None, mode='super', retrain_config=None):
     criterion = torch.nn.CrossEntropyLoss()
 
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -298,11 +288,19 @@ def evaluate(data_loader, model, device, image, amp=True, choices=None, net=None
     # switch to evaluation mode
     model.eval()
     if mode == 'super':
-        # config = {'layer_num': 14, 'mlp_ratio': [3.5, 4, 4, 3.5, 3.5, 3.5, 4, 4, 4, 3.5, 4, 3.5, 4, 3.5], 'num_heads': [4, 3, 3, 3, 4, 3, 4, 4, 3, 3, 3, 3, 4, 3], 'embed_dim': [240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240]}
-        # config = {'layer_num': 14, 'mlp_ratio': [4, 4, 4, 3.5, 3.5, 4, 3.5, 3.5, 4, 4, 3.5, 4, 4, 4], 'num_heads': [3, 4, 4, 3, 4, 3, 4, 3, 4, 3, 3, 4, 4, 3], 'embed_dim': [240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240]}
-        config = {'layer_num': 12, 'mlp_ratio': [3.5, 4, 3.5, 4, 3.5, 4, 3.5, 3.5, 4, 3.5, 4, 4], 'num_heads': [3, 4, 4, 3, 3, 4, 3, 3, 4, 4, 4, 4], 'embed_dim': [192, 192, 192, 192, 192, 192, 192, 192, 192, 192, 192, 192]}
-        
-        # config = sample_configs(choices=choices)
+        config = sample_configs(choices=choices)
+        # config = {
+        #     'layer_num': 13,
+        #     'mlp_ratio': [4.0, 3.5, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 3.5, 3.5, 4.0, 3.5, 3.5],
+        #     'num_heads': [4, 3, 4, 3, 3, 4, 4, 3, 4, 4, 4, 3, 4],
+        #     'embed_dim': [216] * 13
+        # }
+        # config = {
+        #     'layer_num': 14,
+        #     'mlp_ratio': [4.0, 4.0, 3.5, 4.0, 3.5, 3.5, 3.5, 3.5, 4.0, 4.0, 3.5, 3.5, 3.5, 3.5],
+        #     'num_heads': [3, 3, 4, 4, 3, 3, 4, 4, 4, 4, 4, 3, 4, 3],
+        #     'embed_dim': [240] * 14
+        # }
         model_module = unwrap_model(model)
         model_module.set_sample_config(config=config)
     else:
@@ -315,13 +313,23 @@ def evaluate(data_loader, model, device, image, amp=True, choices=None, net=None
     parameters = model_module.get_sampled_params_numel(config)
     print("sampled model parameters: {}".format(parameters))
     
-    ### input 이미지 저장하려면 여기 START ###
-    # print('image shape : ', image.shape)
+    ## input 이미지 저장하려면 여기 START ###
+    # ① 이미지 파일 경로 지정
+    image_path = '/data/val/n04596742/ILSVRC2012_val_00001328.JPEG'  # or .png, .jpeg 등
+
+    # ② 이미지 열기 (PIL.Image 형태)
+    pil_image = Image.open(image_path).convert('RGB')
+
+    # ③ ToTensor: [0, 1] 범위로 변환 + CxHxW 형태로 바꿈
+    transform = transforms.ToTensor()
+    image = transform(pil_image)  # shape: [3, H, W]
+
+    print('image shape : ', image.shape)
     
-    # image = image.to(device, non_blocking=True)
-    # image_test = (image - image.min()) / (image.max() - image.min())  # 값 범위를 [0, 1]로 조정
-    # save_tensor_as_png(image_test, 'input_image.png')
-    ### input 이미지 저장하려면 여기 END ###
+    image = image.to(device, non_blocking=True)
+    image_test = (image - image.min()) / (image.max() - image.min())  # 값 범위를 [0, 1]로 조정
+    save_tensor_as_png(image_test, 'input_image1.png')
+    ## input 이미지 저장하려면 여기 END ###
     
     # image = image_test
 
@@ -353,8 +361,11 @@ def evaluate(data_loader, model, device, image, amp=True, choices=None, net=None
     # visualize_attention_maps(image.squeeze(0), attention_maps)
     
     ### START : visualize attention map on input image ###
-    img = Image.open('input_image.png')
+    img = Image.open('input_image1.png')
     x = to_tensor(img)
+
+    # net = unwrap_model(model)
+    # net.set_sample_config(config=config)  # 이걸 반드시 해줘야 함!
     
     # net.blocks[-1].attn.forward = my_forward_wrapper(net.blocks[-1].attn)
     for block in net.blocks:
@@ -369,43 +380,20 @@ def evaluate(data_loader, model, device, image, amp=True, choices=None, net=None
     # 평균 어텐션 맵 계산
     attn_map = torch.stack([block.attn.attn_map.mean(dim=1).squeeze(0).detach() for block in net.blocks if hasattr(block.attn, 'attn_map')]).mean(dim=0) if any(hasattr(block.attn, 'attn_map') for block in net.blocks) else None
 
-    print(f"cls_attn_map shape: {block.attn.cls_attn_map.shape}")
-
-    # # 평균 클래스 어텐션 맵 계산
-    # cls_weight = torch.stack([block.attn.cls_attn_map.mean(dim=1).view(14, 14).detach() for block in net.blocks if hasattr(block.attn, 'cls_attn_map')]).mean(dim=0) if any(hasattr(block.attn, 'cls_attn_map') for block in net.blocks) else None
+    # 평균 클래스 어텐션 맵 계산
+    cls_weight = torch.stack([block.attn.cls_attn_map.mean(dim=1).view(14, 14).detach() for block in net.blocks if hasattr(block.attn, 'cls_attn_map')]).mean(dim=0) if any(hasattr(block.attn, 'cls_attn_map') for block in net.blocks) else None
     
-    cls_weights = []
-    for block in net.blocks:
-        if hasattr(block.attn, 'cls_attn_map'):
-            cls_map = block.attn.cls_attn_map
-            if cls_map is None:
-                print("[WARN] cls_attn_map is None, skipping.")
-                continue
-            
-            if cls_map.ndim == 2 and cls_map.shape[-1] == 196:
-                try:
-                    cls_map_view = cls_map.view(14, 14)
-                    cls_weights.append(cls_map_view.detach())
-                except Exception as e:
-                    print(f"[WARN] Failed to view cls_map as 14x14: {e}")
-            else:
-                print(f"[WARN] Unexpected cls_attn_map shape: {cls_map.shape}, skipping.")
+    # tensor_to_excel(cls_weight)
 
-    if cls_weights:
-        cls_weight = torch.stack(cls_weights).mean(dim=0)  # shape [14, 14]
+    img_resized = x.permute(1, 2, 0) * 0.5 + 0.5
+    cls_resized = F.interpolate(cls_weight.view(1, 1, 14, 14), (224, 224), mode='bilinear').view(224, 224, 1)
 
-        # 시각화
-        img_resized = x.permute(1, 2, 0) * 0.5 + 0.5
-        cls_resized = F.interpolate(cls_weight.view(1, 1, 14, 14), (224, 224), mode='bilinear').view(224, 224, 1)
-
-        show_img(img, 'result/img.png')
-        show_img(attn_map, 'result/attn_map.png')
-        show_img(cls_weight, 'result/cls_weight.png')
-        show_img(img_resized, 'result/img_resized.png')
-        show_img2(img_resized, cls_resized, alpha=0.8, filename='result/img_resized_overlay.png')
-    else:
-        print("[WARN] No valid cls_weights were collected; skipping cls_weight visualization.")
-
+    show_img(img, 'result/img.png')
+    show_img(attn_map, 'result/attn_map.png')
+    show_img(cls_weight, 'result/cls_weight.png')
+    show_img(img_resized, 'result/img_resized.png')
+    show_img2(img_resized, cls_resized, alpha=0.8, filename='result/img_resized_overlay.png')
+    
     ### END : visualize attention map on input image ###
     
     # return output

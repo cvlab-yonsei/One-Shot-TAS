@@ -98,11 +98,11 @@ def sample_weight(weight, sample_in_dim, sample_out_dim):
 
     sample_weight = weight[:, :sample_in_dim]
     sample_weight = torch.cat([sample_weight[i:sample_out_dim:3, :] for i in range(3)], dim =0)
-    sample_weight.requires_grad_(weight.requires_grad)  # requires_grad 속성 유지
+
     return sample_weight
 
 
 def sample_bias(bias, sample_out_dim):
     sample_bias = bias[:sample_out_dim]
-    sample_bias.requires_grad_(bias.requires_grad)  # requires_grad 속성 유지
+
     return sample_bias

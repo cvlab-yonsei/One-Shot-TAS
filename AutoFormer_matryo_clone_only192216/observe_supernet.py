@@ -10,7 +10,7 @@ from lib.datasets import build_dataset
 from lib import utils
 # from supernet_engine import evaluate
 from supernet_engine_single import evaluate
-from model.supernet_transformer import Vision_TransformerSuper
+from model_map.supernet_transformer import Vision_TransformerSuper
 import argparse
 import os
 import yaml

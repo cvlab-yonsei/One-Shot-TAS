@@ -55,7 +55,12 @@
 # --log-file-path './log/search_original_check_only192_original_optimizer-epoch400-after-matryo-exp_super_change-all-freeze-include-layernorm-random-depth-1-8M.log'
 
 
+# python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution.py --data-path '/data' --gp \
+# --change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint-original-only192216-training-216-1-240-3-lr0002-4.pth' \
+# --min-param-limits 7 --param-limits 8 \
+# --log-file-path './log/search-original-only192216-training-216-1-240-3-lr0002-4-8M.log'
+
 python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution.py --data-path '/data' --gp \
 --change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint-original-only192216-training-216-1-240-3-lr0002-4.pth' \
---min-param-limits 7 --param-limits 8 \
---log-file-path './log/search-original-only192216-training-216-1-240-3-lr0002-4-8M.log'
+--min-param-limits 9 --param-limits 10 \
+--log-file-path './log/search-original-only192216-training-216-1-240-3-lr0002-4-10M.log'

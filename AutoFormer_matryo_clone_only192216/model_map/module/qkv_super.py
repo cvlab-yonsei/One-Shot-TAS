@@ -19,7 +19,7 @@ def uniform_element_selection(tensor, target_dim, dim):
     indices = torch.linspace(0, original_dim - 1, target_dim).long().to(tensor.device)
     return tensor.index_select(dim, indices)
 
-class LinearSuper(nn.Linear):
+class qkv_super(nn.Linear):
     def __init__(self, super_in_dim, super_out_dim, bias=True, uniform_=None, non_linear='linear', scale=False):
         super().__init__(super_in_dim, super_out_dim, bias=bias)
 
@@ -34,7 +34,7 @@ class LinearSuper(nn.Linear):
         self.samples = {}
 
         self.scale = scale
-        self._reset_parameters(bias, uniform_, non_linear)
+        # self._reset_parameters(bias, uniform_, non_linear)
         self.profiling = False
 
     def profile(self, mode=True):
@@ -84,17 +84,25 @@ class LinearSuper(nn.Linear):
         total_flops += sequence_length *  np.prod(self.samples['weight'].size())
         return total_flops
 
-def sample_weight(weight, sample_in_dim, sample_out_dim):
-    # sample_weight = weight[:, :sample_in_dim]
-    # sample_weight = sample_weight[:sample_out_dim, :]
-    sample_weight = uniform_element_selection(weight, sample_in_dim, dim=1)
-    sample_weight = uniform_element_selection(sample_weight, sample_out_dim, dim=0)
+# def sample_weight(weight, sample_in_dim, sample_out_dim):
+#     sample_weight = uniform_element_selection(weight, sample_in_dim, dim=1)
+#     sample_weight = uniform_element_selection(sample_weight, sample_out_dim, dim=0)
+#     return sample_weight
 
+# def sample_bias(bias, sample_out_dim):
+#     sample_bias = uniform_element_selection(bias, sample_out_dim, dim=0)
+#     return sample_bias
+
+
+def sample_weight(weight, sample_in_dim, sample_out_dim):
+
+    sample_weight = weight[:, :sample_in_dim]
+    sample_weight = torch.cat([sample_weight[i:sample_out_dim:3, :] for i in range(3)], dim =0)
+    sample_weight.requires_grad_(weight.requires_grad)  # requires_grad 속성 유지
     return sample_weight
 
 
 def sample_bias(bias, sample_out_dim):
-    # sample_bias = bias[:sample_out_dim]
-    sample_bias = uniform_element_selection(bias, sample_out_dim, dim=0)
-
+    sample_bias = bias[:sample_out_dim]
+    sample_bias.requires_grad_(bias.requires_grad)  # requires_grad 속성 유지
     return sample_bias
