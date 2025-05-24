@@ -59,3 +59,8 @@ python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution_400.p
 --change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint-original-only192216-training-300-460-23.pth' \
 --min-param-limits 5 --param-limits 6 \
 --log-file-path './log/search_original-only192216-training-300-460-23-6M.log'
+
+python3 -m torch.distributed.launch --nproc_per_node=8 --use_env evolution_400.py --data-path '/data' --gp \
+--change_qk --relative_position --dist-eval --cfg ./experiments/supernet/supernet-T.yaml --resume '/OUTPUT_PATH/checkpoint-original-only192216-training-23.pth' \
+--min-param-limits 5 --param-limits 6 \
+--log-file-path './log/search-checkpoint-original-only192216-training-23-6M.log'
