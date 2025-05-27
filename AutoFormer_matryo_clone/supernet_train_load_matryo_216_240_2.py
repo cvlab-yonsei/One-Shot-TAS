@@ -14,21 +14,24 @@ from timm.scheduler import create_scheduler
 from timm.optim import create_optimizer
 from timm.utils import NativeScaler
 from lib.datasets import build_dataset
-from supernet_engine import train_one_epoch, evaluate
+from supernet_engine_load_matryo_216_240_2 import train_one_epoch, evaluate
 from lib.samplers import RASampler
 from lib import utils
 from lib.config import cfg, update_config_from_file
+from timm.utils.model import unwrap_model
+# from model.supernet_transformer import Vision_TransformerSuper
+# from model_matryo.supernet_transformer import Vision_TransformerSuper
+
 from model.supernet_transformer import Vision_TransformerSuper
+from model_matryo.supernet_transformer import Vision_TransformerSuper as Vision_TransformerSuper_Matryo
+from weight_clone import init_model_matryo_from_model
+from weight_clone_zero import zero_out_frozen_parameters
+
 
 import sys
 import warnings
 
-# UserWarning 무시
-warnings.filterwarnings("ignore", category=UserWarning)
-
-sys.stdout = open('./log/supernet_original_only192216_training_test_100_460.log', 'w')
-sys.stderr = sys.stdout
-
+import math
 
 def get_args_parser():
     parser = argparse.ArgumentParser('AutoFormer training and evaluation script', add_help=False)
@@ -82,30 +85,30 @@ def get_args_parser():
                         help='Clip gradient norm (default: None, no clipping)')
     parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
                         help='SGD momentum (default: 0.9)')
-    parser.add_argument('--weight-decay', type=float, default=0.05,
+    parser.add_argument('--weight-decay', type=float, default=0.05, #0.05 -> 0.001
                         help='weight decay (default: 0.05)')
 
     # Learning rate schedule parameters
     parser.add_argument('--sched', default='cosine', type=str, metavar='SCHEDULER',
                         help='LR scheduler (default: "cosine"')
-    parser.add_argument('--lr', type=float, default=0.000025, metavar='LR',
-                        help='learning rate (default: 5e-4)') # 5e-4 -> 0.000025
+    parser.add_argument('--lr', type=float, default=0.000025, metavar='LR', # 5e-4 -> 0.001
+                        help='learning rate (default: 5e-4)')
     parser.add_argument('--lr-noise', type=float, nargs='+', default=None, metavar='pct, pct',
                         help='learning rate noise on/off epoch percentages')
     parser.add_argument('--lr-noise-pct', type=float, default=0.67, metavar='PERCENT',
                         help='learning rate noise limit percent (default: 0.67)')
     parser.add_argument('--lr-noise-std', type=float, default=1.0, metavar='STDDEV',
                         help='learning rate noise std-dev (default: 1.0)')
-    parser.add_argument('--warmup-lr', type=float, default=1e-6, metavar='LR',
+    parser.add_argument('--warmup-lr', type=float, default=1e-6, metavar='LR', # 1e-6 -> 0.0001
                         help='warmup learning rate (default: 1e-6)')
-    parser.add_argument('--min-lr', type=float, default=0.00001, metavar='LR',
-                        help='lower lr bound for cyclic schedulers that hit 0 (1e-5)') # 1e-5 -> 0.00001
+    parser.add_argument('--min-lr', type=float, default=0.00001, metavar='LR', # 1e-5 -> 0.00001
+                        help='lower lr bound for cyclic schedulers that hit 0 (1e-5)')
     parser.add_argument('--lr-power', type=float, default=1.0,
                         help='power of the polynomial lr scheduler')
 
     parser.add_argument('--decay-epochs', type=float, default=30, metavar='N',
                         help='epoch interval to decay LR')
-    parser.add_argument('--warmup-epochs', type=int, default=5, metavar='N',
+    parser.add_argument('--warmup-epochs', type=int, default=2, metavar='N', # 5 -> 2
                         help='epochs to warmup LR, if scheduler supports')
     parser.add_argument('--cooldown-epochs', type=int, default=10, metavar='N',
                         help='epochs to cooldown LR at min_lr, after cyclic schedule ends')
@@ -183,7 +186,10 @@ def get_args_parser():
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
-    parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
+    parser.add_argument('--dist_url', default='tcp://localhost:2041', help='url used to set up distributed training')
+    parser.add_argument('--save_checkpoint_path', default='', help='save checkpoint to the path')
+    parser.add_argument('--save_log_path', default='', help='save log file to the path')
+    parser.add_argument('--interval', default=1, type=int, help='interval of reusing top-k subnet searched by the sn indicator')
 
     parser.add_argument('--amp', action='store_true')
     parser.add_argument('--no-amp', action='store_false', dest='amp')
@@ -193,6 +199,12 @@ def get_args_parser():
     return parser
 
 def main(args):
+
+    # UserWarning 무시
+    warnings.filterwarnings("ignore", category=UserWarning)
+
+    sys.stdout = open(args.save_log_path, 'w')
+    sys.stderr = sys.stdout
 
     utils.init_distributed_mode(args)
     update_config_from_file(args.cfg)
@@ -259,24 +271,85 @@ def main(args):
             prob=args.mixup_prob, switch_prob=args.mixup_switch_prob, mode=args.mixup_mode,
             label_smoothing=args.smoothing, num_classes=args.nb_classes)
 
-    print(f"Creating SuperVisionTransformer")
-    print(cfg)
-    model = Vision_TransformerSuper(img_size=args.input_size,
-                                    patch_size=args.patch_size,
-                                    embed_dim=cfg.SUPERNET.EMBED_DIM, depth=cfg.SUPERNET.DEPTH,
-                                    num_heads=cfg.SUPERNET.NUM_HEADS,mlp_ratio=cfg.SUPERNET.MLP_RATIO,
-                                    qkv_bias=True, drop_rate=args.drop,
-                                    drop_path_rate=args.drop_path,
-                                    gp=args.gp,
-                                    num_classes=args.nb_classes,
-                                    max_relative_position=args.max_relative_position,
-                                    relative_position=args.relative_position,
-                                    change_qkv=args.change_qkv, abs_pos=not args.no_abs_pos)
 
     choices = {'num_heads': cfg.SEARCH_SPACE.NUM_HEADS, 'mlp_ratio': cfg.SEARCH_SPACE.MLP_RATIO,
                'embed_dim': cfg.SEARCH_SPACE.EMBED_DIM , 'depth': cfg.SEARCH_SPACE.DEPTH}
 
+    print(f"Creating SuperVisionTransformer")
+    print(cfg)
+    # 1. 기존 SuperNet 모델 생성
+    model_super = Vision_TransformerSuper(
+        img_size=args.input_size,
+        patch_size=args.patch_size,
+        embed_dim=cfg.SUPERNET.EMBED_DIM,
+        depth=cfg.SUPERNET.DEPTH,
+        num_heads=cfg.SUPERNET.NUM_HEADS,
+        mlp_ratio=cfg.SUPERNET.MLP_RATIO,
+        qkv_bias=True,
+        drop_rate=args.drop,
+        drop_path_rate=args.drop_path,
+        gp=args.gp,
+        num_classes=args.nb_classes,
+        max_relative_position=args.max_relative_position,
+        relative_position=args.relative_position,
+        change_qkv=args.change_qkv,
+        abs_pos=not args.no_abs_pos
+    )
+    model_super.to(device)
+
+    # 2. checkpoint 로드
+    if args.resume:
+        if args.resume.startswith('https'):
+            checkpoint = torch.hub.load_state_dict_from_url(
+                args.resume, map_location='cpu', check_hash=True)
+        else:
+            checkpoint = torch.load(args.resume, map_location='cpu')
+        model_super.load_state_dict(checkpoint['model'])
+
+    # 3. Matryo 모델 생성
+    model_matryo = Vision_TransformerSuper_Matryo(
+        img_size=args.input_size,
+        patch_size=args.patch_size,
+        embed_dim=cfg.SUPERNET.EMBED_DIM,
+        depth=cfg.SUPERNET.DEPTH,
+        num_heads=cfg.SUPERNET.NUM_HEADS,
+        mlp_ratio=cfg.SUPERNET.MLP_RATIO,
+        qkv_bias=True,
+        drop_rate=args.drop,
+        drop_path_rate=args.drop_path,
+        gp=args.gp,
+        num_classes=args.nb_classes,
+        max_relative_position=args.max_relative_position,
+        relative_position=args.relative_position,
+        change_qkv=args.change_qkv,
+        abs_pos=not args.no_abs_pos,
+        choices=choices
+    )
+    model_matryo.to(device)
+
+    # 4. model_super → model_matryo 파라미터 이식
+    init_model_matryo_from_model(model_super, model_matryo)
+
+    # # 이때 model_matryo 그 set_sample_config 해서 requires_grad 바꿔야돼. case_num = 2
+    # case_num = 2
+    # config = {}
+    # depth = 14
+    # config['embed_dim'] = [240] * depth
+    # config['mlp_ratio'] = [4.0] * depth
+    # config['num_heads'] = [4] * depth
+    # config['layer_num'] = depth
+
+    # model_module = unwrap_model(model_matryo)
+    # model_module.set_sample_config(config=config, case_num=case_num)
+
+    # zero_out_frozen_parameters(model_matryo)
+
+
+    # 5. model 변수 자체를 matryo로 바꾸기
+    model = model_matryo
     model.to(device)
+
+    # 6. Teacher 모델 설정
     if args.teacher_model:
         teacher_model = create_model(
             args.teacher_model,
@@ -289,56 +362,42 @@ def main(args):
         teacher_model = None
         teacher_loss = None
 
+    # 7. model_ema 설정
     model_ema = None
+    # if args.model_ema:
+    #     model_ema = ModelEma(model, decay=args.model_ema_decay)
 
+    # 8. DDP 설정
     model_without_ddp = model
     if args.distributed:
-
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
+        model = torch.nn.parallel.DistributedDataParallel(
+            model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module
 
+    # 9. Optimizer / Scheduler / Loss 정의
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
 
     linear_scaled_lr = args.lr * args.batch_size * utils.get_world_size() / 512.0
     args.lr = linear_scaled_lr
+
     optimizer = create_optimizer(args, model_without_ddp)
     loss_scaler = NativeScaler()
     lr_scheduler, _ = create_scheduler(args, optimizer)
 
-    # criterion = LabelSmoothingCrossEntropy()
-
     if args.mixup > 0.:
-        # smoothing is handled with mixup label transform
         criterion = SoftTargetCrossEntropy()
     elif args.smoothing:
         criterion = LabelSmoothingCrossEntropy(smoothing=args.smoothing)
     else:
         criterion = torch.nn.CrossEntropyLoss()
 
+    # 10. output dir 생성 및 config 저장
     output_dir = Path(args.output_dir)
-
     if not output_dir.exists():
         output_dir.mkdir(parents=True)
-    # save config for later experiments
     with open(output_dir / "config.yaml", 'w') as f:
         f.write(args_text)
-    if args.resume:
-        if args.resume.startswith('https'):
-            checkpoint = torch.hub.load_state_dict_from_url(
-                args.resume, map_location='cpu', check_hash=True)
-        else:
-            checkpoint = torch.load(args.resume, map_location='cpu')
-        model_without_ddp.load_state_dict(checkpoint['model'])
-        if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
-            optimizer.load_state_dict(checkpoint['optimizer'])
-            lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
-            args.start_epoch = checkpoint['epoch'] + 1
-            if 'scaler' in checkpoint:
-                loss_scaler.load_state_dict(checkpoint['scaler'])
-            if args.model_ema:
-                utils._load_checkpoint_for_ema(model_ema, checkpoint['model_ema'])
-
     retrain_config = None
     if args.mode == 'retrain' and "RETRAIN" in cfg:
         retrain_config = {'layer_num': cfg.RETRAIN.DEPTH, 'embed_dim': [cfg.RETRAIN.EMBED_DIM]*cfg.RETRAIN.DEPTH,
@@ -362,13 +421,14 @@ def main(args):
             args.clip_grad, model_ema, mixup_fn,
             amp=args.amp, teacher_model=teacher_model,
             teach_loss=teacher_loss,
-            choices=choices, mode = args.mode, retrain_config=retrain_config,
+            choices=choices, mode = args.mode, retrain_config=retrain_config, args=args
         )
 
         lr_scheduler.step(epoch)
         if args.output_dir:
             # checkpoint_paths = [output_dir / 'checkpoint.pth']
-            checkpoint_paths = [output_dir / ('checkpoint-original-only192216-training-100-460-' + str((epoch+1)//20) + '.pth')]
+            checkpoint_paths = [output_dir / (args.save_checkpoint_path + str((epoch+1)//10) + '.pth')]
+            # checkpoint_paths = [output_dir / (args.save_checkpoint_path + str((epoch+1)) + '.pth')]
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({
                     'model': model_without_ddp.state_dict(),
@@ -385,8 +445,7 @@ def main(args):
         max_accuracy = max(max_accuracy, test_stats["acc1"])
         print(f'Max accuracy: {max_accuracy:.2f}%')
 
-        log_stats = {
-            # **{f'train_{k}': v for k, v in train_stats.items()},
+        log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                      **{f'test_{k}': v for k, v in test_stats.items()},
                      'epoch': epoch,
                      'n_parameters': n_parameters}

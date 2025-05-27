@@ -17,11 +17,11 @@ def sample_configs(choices, epoch=None):
     depth = random.choice(choices['depth'])
     embed_dim = [192]
     if epoch is not None:
-        if epoch > 299 and epoch < 460:
+        if epoch > 99 and epoch < 460:
             embed_dim = random.choices([192, 216], weights=[1, 1])
         # if epoch >= 460:
-        if epoch < 100:
-            embed_dim = random.choices([192, 216], weights=[1, 1])
+        # if epoch < 100:
+        #     embed_dim = random.choices([192, 216], weights=[1, 1])
             # embed_dim = random.choices([192, 216, 240], weights=[1, 2, 2])
     for dimension in dimensions:
         config[dimension] = [random.choice(choices[dimension]) for _ in range(depth)]
