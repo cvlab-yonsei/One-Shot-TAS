@@ -15,6 +15,9 @@ import os
 import yaml
 from lib.config import cfg, update_config_from_file
 
+import sys
+import warnings
+
 def decode_cand_tuple(cand_tuple):
     depth = cand_tuple[0]
     return depth, list(cand_tuple[1:depth+1]), list(cand_tuple[depth + 1: 2 * depth + 1]), cand_tuple[-1]
@@ -452,9 +455,17 @@ def get_args_parser():
     parser.add_argument('--no-amp', action='store_false', dest='amp')
     parser.set_defaults(amp=True)
 
+    parser.add_argument('--log-file-path', default='', type=str, help='Path to the log file')
+
+
     return parser
 
 def main(args):
+    # UserWarning 무시
+    warnings.filterwarnings("ignore", category=UserWarning)
+
+    sys.stdout = open(args.log_file_path, 'w')
+    sys.stderr = sys.stdout
 
     update_config_from_file(args.cfg)
     utils.init_distributed_mode(args)
