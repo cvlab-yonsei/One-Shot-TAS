@@ -3,10 +3,17 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from model_matryo.module.Linear_super import LinearSuper
-from model_matryo.module.layernorm_super import LayerNormSuper
-from model_matryo.module.multihead_super import AttentionSuper
-from model_matryo.module.embedding_super import PatchembedSuper
+
+# from model_matryo.module.Linear_super import LinearSuper
+# from model_matryo.module.layernorm_super import LayerNormSuper
+# from model_matryo.module.multihead_super import AttentionSuper
+# from model_matryo.module.embedding_super import PatchembedSuper
+
+from model_matryo.module_BC.Linear_super import LinearSuper
+from model_matryo.module_BC.layernorm_super import LayerNormSuper
+from model_matryo.module_BC.multihead_super import AttentionSuper
+from model_matryo.module_BC.embedding_super import PatchembedSuper
+
 from model_matryo.utils import trunc_normal_
 from model_matryo.utils import DropPath
 import numpy as np
@@ -84,7 +91,7 @@ class Vision_TransformerSuper(nn.Module):
 
         # self.pos_drop = nn.Dropout(p=drop_rate)
         if self.pre_norm:
-            self.norm = LayerNormSuper(super_embed_dim=embed_dim)
+            self.norm = LayerNormSuper(super_embed_dim=embed_dim, choices=choices)
 
 
         # classifier head
@@ -92,14 +99,34 @@ class Vision_TransformerSuper(nn.Module):
 
         self.apply(self._init_weights)
 
+    # def _init_weights(self, m):
+    #     if isinstance(m, nn.Linear):
+    #         trunc_normal_(m.weight, std=.02)
+    #         if isinstance(m, nn.Linear) and m.bias is not None:
+    #             nn.init.constant_(m.bias, 0)
+    #     elif isinstance(m, nn.LayerNorm):
+    #         nn.init.constant_(m.bias, 0)
+    #         nn.init.constant_(m.weight, 1.0)
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
             trunc_normal_(m.weight, std=.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
+            if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
+
         elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
+            # LayerNormSuper는 제외하고 기본 LayerNorm만 초기화
+            if not isinstance(m, LayerNormSuper):
+                if m.weight is not None:
+                    nn.init.constant_(m.weight, 1.0)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+
+        elif isinstance(m, LayerNormSuper):
+            # LayerNormSuper의 split 파라미터 초기화
+            for w in m.split_weights.values():
+                nn.init.constant_(w, 1.0)
+            for b in m.split_bias.values():
+                nn.init.constant_(b, 0)
 
     # def _init_weights(self, m):
     #     def is_bias(name):
@@ -220,7 +247,7 @@ class Vision_TransformerSuper(nn.Module):
             else:
                 blocks.set_sample_config(is_identity_layer=True)
         if self.pre_norm:
-            self.norm.set_sample_config(self.sample_embed_dim[-1], self.sample_embed_dim_prev[-1] if self.sample_embed_dim_prev is not None else None)
+            self.norm.set_sample_config(self.sample_embed_dim[-1], self.sample_embed_dim_prev[-1] if self.sample_embed_dim_prev is not None else None, case_num=case_num)
         self.head.set_sample_config(self.sample_embed_dim[-1], self.num_classes, self.sample_embed_dim_prev[-1] if self.sample_embed_dim_prev is not None else None, self.num_classes, pretrained=pretrained, case_num=case_num)
 
     def get_sampled_params_numel(self, config):
@@ -320,8 +347,8 @@ class TransformerEncoderLayer(nn.Module):
             max_relative_position=max_relative_position, choices=choices
         )
 
-        self.attn_layer_norm = LayerNormSuper(self.super_embed_dim)
-        self.ffn_layer_norm = LayerNormSuper(self.super_embed_dim)
+        self.attn_layer_norm = LayerNormSuper(self.super_embed_dim, choices=choices)
+        self.ffn_layer_norm = LayerNormSuper(self.super_embed_dim, choices=choices)
         # self.dropout = dropout
         self.activation_fn = gelu
         # self.normalize_before = args.encoder_normalize_before
@@ -378,7 +405,7 @@ class TransformerEncoderLayer(nn.Module):
             self.sample_ffn_embed_dim_this_layer_prev = int(embed_dim_val * mlp_ratio_val)
 
 
-        self.attn_layer_norm.set_sample_config(sample_embed_dim=self.sample_embed_dim, sample_embed_dim_prev=self.sample_embed_dim_prev)
+        self.attn_layer_norm.set_sample_config(sample_embed_dim=self.sample_embed_dim, sample_embed_dim_prev=self.sample_embed_dim_prev, case_num=case_num)
 
         self.attn.set_sample_config(sample_q_embed_dim=self.sample_num_heads_this_layer*64, sample_num_heads=self.sample_num_heads_this_layer, sample_in_embed_dim=self.sample_embed_dim,
                                     sample_q_embed_dim_prev=(self.sample_num_heads_prev * 64) if self.sample_num_heads_prev is not None else None, sample_num_heads_prev=self.sample_num_heads_prev, sample_in_embed_dim_prev=self.sample_embed_dim_prev, case_num=case_num)
@@ -388,7 +415,7 @@ class TransformerEncoderLayer(nn.Module):
         self.fc2.set_sample_config(sample_in_dim=self.sample_ffn_embed_dim_this_layer, sample_out_dim=self.sample_out_dim,
                                    sample_in_dim_prev=self.sample_ffn_embed_dim_this_layer_prev, sample_out_dim_prev=self.sample_out_dim_prev, pretrained=pretrained, case_num=case_num)
 
-        self.ffn_layer_norm.set_sample_config(sample_embed_dim=self.sample_embed_dim, sample_embed_dim_prev=self.sample_embed_dim_prev)
+        self.ffn_layer_norm.set_sample_config(sample_embed_dim=self.sample_embed_dim, sample_embed_dim_prev=self.sample_embed_dim_prev, case_num=case_num)
 
 
     def forward(self, x):

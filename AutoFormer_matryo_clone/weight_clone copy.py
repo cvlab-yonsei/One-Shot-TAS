@@ -51,51 +51,41 @@ def init_model_matryo_from_model(model, model_matryo):
                     if base_name not in model_dict:
                         print(f"[⚠] {base_name} not found in model_dict")
                         continue
-                    full_weight = model_dict[base_name].data
+                    full_weight = model_dict[base_name]
 
-                    if '_' in split_name:  # ex: w_1 (LayerNorm), w2_1 (Linear)
-                        if split_name.startswith('w_'):  # LayerNorm: w_1
+                    if '_' in split_name:  # ex: w2_1
+                        if 'w_' in split_name: # layer norm
                             i = int(split_name.replace('w_', ''))
-                            offset = sum(
-                                module.split_weights[f'w_{k}'].shape[0]
-                                for k in range(1, i)
-                            )
+                            offset = sum(module.split_weights[f'w_{k}'].shape[0] for k in range(1, i))
                             cropped = full_weight[offset:offset + split_param.shape[0]]
-                        else:  # Linear: w2_1
+                            split_param.copy_(cropped)
+                        else:
                             i, j = map(int, split_name.replace('w', '').split('_'))
-                            dim0 = sum(
-                                module.split_weights[f'w{k}_{j}'].shape[0]
-                                for k in range(1, i)
-                            )
-                            dim1 = sum(
-                                module.split_weights[f'w{i}_{k}'].shape[1]
-                                for k in range(1, j)
-                            )
+                            dim0 = sum(module.split_weights[f'w{k}_{j}'].shape[0] for k in range(1, i))
+                            dim1 = sum(module.split_weights[f'w{i}_{k}'].shape[1] for k in range(1, j))
                             h, w = split_param.shape
                             cropped = full_weight[dim0:dim0+h, dim1:dim1+w]
-
-                    else:  # 단일 w1, w2, w3, ...
-                        # 순서를 정확히 보장하기 위해 key 기준 정렬
-                        ordered_keys = sorted(
-                            [k for k in module.split_weights.keys() if '_' not in k],
-                            key=lambda x: int(x.replace('w', ''))
-                        )
-                        idx = ordered_keys.index(split_name)
-                        offset = sum(
-                            module.split_weights[k].shape[0]
-                            for k in ordered_keys[:idx]
-                        )
+                    # else:  # ex: w1
+                    #     h, w = split_param.shape
+                    #     cropped = full_weight[:h, :w]
+                    elif split_name == 'w1':
                         if full_weight.dim() == 4:
+                            # [out_c, in_c, k_h, k_w]
                             oc, ic, kh, kw = split_param.shape
-                            cropped = full_weight[offset:offset+oc, :ic, :kh, :kw]
+                            cropped = full_weight[:oc, :ic, :kh, :kw]
                         elif full_weight.dim() == 2:
                             h, w = split_param.shape
-                            cropped = full_weight[offset:offset+h, :w]
+                            cropped = full_weight[:h, :w]
                         else:
                             raise ValueError(f"Unsupported weight shape: {full_weight.shape}")
+                        split_param.copy_(cropped)
+
+
+                    else:
+                        print(f"[⚠] Unknown split_name format: {split_name}")
+                        continue
 
                     split_param.copy_(cropped)
-
 
             # --- split_bias 처리 ---
             if hasattr(module, 'split_bias'):
@@ -118,51 +108,52 @@ def init_model_matryo_from_model(model, model_matryo):
                         bias_param.copy_(full_bias[:bias_param.shape[0]])
 
             # --- split_biases 처리 (복수형: b1, b2, ...) ---
-            if hasattr(module, 'split_biases') and isinstance(module.split_biases, nn.ParameterDict):
-                base_name = name + '.bias'
-                if base_name not in model_dict:
-                    print(f"[⚠] {base_name} not found in model_dict")
-                    continue
+            if hasattr(module, 'split_biases'):
+                for bias_name, bias_param in module.split_biases.items():
+                    if not isinstance(bias_param, nn.Parameter):
+                        continue
 
-                full_bias = model_dict[base_name].data
-                offset = 0
-                for bias_name in sorted(module.split_biases.keys()):
-                    bias_param = module.split_biases[bias_name]
+                    # b1일 때만 처리
+                    if bias_name != 'b1':
+                        continue
+
+                    base_name = name + '.bias'
+                    if base_name not in model_dict:
+                        print(f"[⚠] {base_name} not found in model_dict")
+                        continue
+
+                    full_bias = model_dict[base_name]
+                    # print("full_bias shape : ", full_bias.shape)
+                    # print("bias_param shape : ", bias_param.shape)
                     h = bias_param.shape[0]
-                    cropped = full_bias[offset:offset + h]
+                    cropped = full_bias[:h]
                     bias_param.copy_(cropped)
-                    offset += h
 
-
-            # --- split_embeddings_v / h 처리 (w1, w2, w3, w4 ...) ---
+            # --- split_embeddings_v / h 처리 (w1만) ---
             if hasattr(module, 'split_embeddings_v') and hasattr(module, 'split_embeddings_h'):
                 # vertical
-                base_name_v = name + '.embeddings_table_v'
-                if base_name_v not in model_dict:
-                    print(f"[⚠] {base_name_v} not found in model_dict")
-                else:
-                    full_weight_v = model_dict[base_name_v].data
-                    offset = 0
-                    for key in sorted(module.split_embeddings_v.keys()):
-                        split_param = module.split_embeddings_v[key]
+                if 'w1' in module.split_embeddings_v:
+                    split_param = module.split_embeddings_v['w1']
+                    base_name = name + '.embeddings_table_v'
+                    if base_name not in model_dict:
+                        print(f"[⚠] {base_name} not found in model_dict")
+                    else:
+                        full_weight = model_dict[base_name]
                         h, w = split_param.shape
-                        cropped = full_weight_v[offset:offset + h, :w]
+                        cropped = full_weight[:h, :w]
                         split_param.copy_(cropped)
-                        offset += h
 
                 # horizontal
-                base_name_h = name + '.embeddings_table_h'
-                if base_name_h not in model_dict:
-                    print(f"[⚠] {base_name_h} not found in model_dict")
-                else:
-                    full_weight_h = model_dict[base_name_h].data
-                    offset = 0
-                    for key in sorted(module.split_embeddings_h.keys()):
-                        split_param = module.split_embeddings_h[key]
+                if 'w1' in module.split_embeddings_h:
+                    split_param = module.split_embeddings_h['w1']
+                    base_name = name + '.embeddings_table_h'
+                    if base_name not in model_dict:
+                        print(f"[⚠] {base_name} not found in model_dict")
+                    else:
+                        full_weight = model_dict[base_name]
                         h, w = split_param.shape
-                        cropped = full_weight_h[offset:offset + h, :w]
+                        cropped = full_weight[:h, :w]
                         split_param.copy_(cropped)
-                        offset += h
 
 
         # --- fallback copy: 이름과 shape 일치하는 경우 그냥 복사 ---

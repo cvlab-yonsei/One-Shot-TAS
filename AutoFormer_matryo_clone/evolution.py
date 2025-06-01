@@ -9,8 +9,8 @@ from pathlib import Path
 from lib.datasets import build_dataset
 from lib import utils
 from supernet_engine import evaluate
-from model_matryo.supernet_transformer import Vision_TransformerSuper
-# from model.supernet_transformer import Vision_TransformerSuper
+# from model_matryo.supernet_transformer import Vision_TransformerSuper
+from model.supernet_transformer import Vision_TransformerSuper
 import argparse
 import os
 import yaml
@@ -137,7 +137,7 @@ class EvolutionSearcher(object):
         choices = {
             'num_heads': [3, 4],
             'mlp_ratio': [3.5, 4.0],
-            'embed_dim': [216],
+            'embed_dim': [192],
             'depth': [12, 13, 14]
         }
         # choices = {
@@ -570,7 +570,7 @@ def main(args):
                                     max_relative_position=args.max_relative_position,
                                     relative_position=args.relative_position,
                                     change_qkv=args.change_qkv, abs_pos=not args.no_abs_pos, 
-                                    choices=choices
+                                    # choices=choices
                                     )
 
     model.to(device)
