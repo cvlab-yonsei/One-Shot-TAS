@@ -15,21 +15,21 @@ def sample_configs(choices, epoch=None):
     config = {}
     dimensions = ['mlp_ratio', 'num_heads']
     depth = random.choice(choices['depth'])
-    embed_dim = [320]
+    embed_dim = [528]
     if epoch is not None:
         if epoch < 200:
-            embed_dim = random.choices([320, 384], weights=[1, 1])
+            embed_dim = random.choices([528, 576], weights=[1, 1])
         elif epoch > 199 and epoch < 600:
-            embed_dim = random.choices([320, 384, 448], weights=[1, 1, 1])
+            embed_dim = random.choices([528, 576, 624], weights=[1, 1, 1])
         # if epoch >= 460:
         # if epoch < 100:
-        #     embed_dim = random.choices([320, 384], weights=[1, 1])
-            # embed_dim = random.choices([320, 384, 448], weights=[1, 2, 2])
+        #     embed_dim = random.choices([528, 576], weights=[1, 1])
+            # embed_dim = random.choices([528, 576, 624], weights=[1, 2, 2])
     for dimension in dimensions:
         config[dimension] = [random.choice(choices[dimension]) for _ in range(depth)]
 
     # config['embed_dim'] = [random.choice(choices['embed_dim'])]*depth
-    # config['embed_dim'] = [random.choices([320, 384], weights=[1, 1])[0] for _ in range(depth)]
+    # config['embed_dim'] = [random.choices([528, 576], weights=[1, 1])[0] for _ in range(depth)]
     config['embed_dim'] = [embed_dim[0]] * depth
     config['layer_num'] = depth
     return config
@@ -139,20 +139,20 @@ def evaluate(data_loader, model, device, amp=True, choices=None, mode='super', r
         #         'layer_num': 13,
         #         'mlp_ratio': [4.0, 3.5, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 3.5, 3.5, 4.0, 3.5, 3.5],
         #         'num_heads': [4, 3, 4, 3, 3, 4, 4, 3, 4, 4, 4, 3, 4],
-        #         'embed_dim': [384] * 13
+        #         'embed_dim': [576] * 13
         #     }
         # else:
         #     # config = {
         #     #     'layer_num': 14,
         #     #     'mlp_ratio': [4.0, 4.0, 3.5, 4.0, 3.5, 3.5, 3.5, 3.5, 4.0, 4.0, 3.5, 3.5, 3.5, 3.5],
         #     #     'num_heads': [3, 3, 4, 4, 3, 3, 4, 4, 4, 4, 4, 3, 4, 3],
-        #     #     'embed_dim': [448] * 14
+        #     #     'embed_dim': [624] * 14
         #     # }
         #     config = {
         #         'layer_num': 12, 
         #         'mlp_ratio': [4.0, 4, 3.5, 3.5, 4.0, 4, 4.0, 3.5, 4.0, 4, 4.0, 4.0], 
         #         'num_heads': [4, 3, 3, 4, 3, 3, 4, 4, 4, 3, 4, 3], 
-        #         'embed_dim': [320, 320, 320, 320, 320, 320, 320, 320, 320, 320, 320, 320]
+        #         'embed_dim': [528, 528, 528, 528, 528, 528, 528, 528, 528, 528, 528, 528]
         #         }
         model_module = unwrap_model(model)
         model_module.set_sample_config(config=config)

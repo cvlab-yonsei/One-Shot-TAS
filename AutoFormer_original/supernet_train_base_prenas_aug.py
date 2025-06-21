@@ -14,7 +14,7 @@ from timm.scheduler import create_scheduler
 from timm.optim import create_optimizer
 from timm.utils import NativeScaler
 from lib.datasets import build_dataset
-from supernet_engine_small import train_one_epoch, evaluate
+from supernet_engine_base import train_one_epoch, evaluate
 from lib.samplers import RASampler
 from lib import utils
 from lib.config import cfg, update_config_from_file
@@ -26,7 +26,7 @@ import warnings
 # UserWarning 무시
 warnings.filterwarnings("ignore", category=UserWarning)
 
-sys.stdout = open('./log/supernet_original_small_200_500_12_123.log', 'w')
+sys.stdout = open('./log/supernet_original_base_200_500_12_123_324.log', 'w')
 sys.stderr = sys.stdout
 
 
@@ -99,7 +99,7 @@ def get_args_parser():
                         help='learning rate noise std-dev (default: 1.0)')
     parser.add_argument('--warmup-lr', type=float, default=1e-6, metavar='LR',
                         help='warmup learning rate (default: 1e-6)')
-    parser.add_argument('--min-lr', type=float, default=1e-5, metavar='LR',
+    parser.add_argument('--min-lr', type=float, default=1e-7, metavar='LR', # base 1e-5 -> 1e-7
                         help='lower lr bound for cyclic schedulers that hit 0 (1e-5)')
     parser.add_argument('--lr-power', type=float, default=1.0,
                         help='power of the polynomial lr scheduler')
@@ -118,7 +118,7 @@ def get_args_parser():
     # Augmentation parameters
     parser.add_argument('--color-jitter', type=float, default=0.4, metavar='PCT',
                         help='Color jitter factor (default: 0.4)')
-    parser.add_argument('--aa', type=str, default='v0r-mstd0.5', metavar='NAME',
+    parser.add_argument('--aa', type=str, default='rand-n3-m10-mstd0.5-inc1', metavar='NAME',
                         help='Use AutoAugment policy. "v0" or "original". " + \
                              "(default: rand-m9-mstd0.5-inc1)'),
     # parser.add_argument('--aa', type=str, default='rand-m9-n2-mstd0.5-inc1', metavar='NAME',
@@ -140,7 +140,7 @@ def get_args_parser():
                         help='Random erase prob (default: 0.25)')
     parser.add_argument('--remode', type=str, default='pixel',
                         help='Random erase mode (default: "pixel")')
-    parser.add_argument('--recount', type=int, default=1,
+    parser.add_argument('--recount', type=int, default=2,
                         help='Random erase count (default: 1)')
     parser.add_argument('--resplit', action='store_true', default=False,
                         help='Do not random erase first (clean) augmentation split')
@@ -195,7 +195,8 @@ def get_args_parser():
 
     parser.add_argument('--amp', action='store_true')
     parser.add_argument('--no-amp', action='store_false', dest='amp')
-    parser.set_defaults(amp=True)
+    # parser.set_defaults(amp=True) # -> original 
+    parser.set_defaults(amp=False)
 
     return parser
 
@@ -375,7 +376,7 @@ def main(args):
         lr_scheduler.step(epoch)
         if args.output_dir:
             # checkpoint_paths = [output_dir / 'checkpoint.pth']
-            checkpoint_paths = [output_dir / ('checkpoint-original-small-200-500-12-123-' + str((epoch+1)//20) + '.pth')]
+            checkpoint_paths = [output_dir / ('checkpoint-original-base-200-500-12-123-' + str((epoch+1)//20) + '.pth')]
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({
                     'model': model_without_ddp.state_dict(),

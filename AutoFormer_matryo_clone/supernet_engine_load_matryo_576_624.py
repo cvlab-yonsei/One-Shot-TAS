@@ -59,33 +59,33 @@ def sample_configs_curriculum(choices, epoch=None, curriculum_epoch=None):
     # depth = 12
 
     if epoch is None:
-        config['embed_dim'] = [320] * depth
+        config['embed_dim'] = [528] * depth
         config['mlp_ratio'] = [3.0] * depth
-        config['num_heads'] = [5] * depth
+        config['num_heads'] = [8] * depth
 
     elif epoch < curriculum_epoch[1]:
-        config['embed_dim'] = [320] * depth
+        config['embed_dim'] = [528] * depth
         config['mlp_ratio'] = [3.0] * depth
-        config['num_heads'] = [5] * depth
-        # config['embed_dim'] = [320] * depth
+        config['num_heads'] = [8] * depth
+        # config['embed_dim'] = [528] * depth
         # config['mlp_ratio'] = [random.choices([3.5, 4.0], weights=[1, 1])[0] for _ in range(depth)]
         # config['num_heads'] = [random.choices([3, 4], weights=[1, 1])[0] for _ in range(depth)]
 
     elif epoch >= curriculum_epoch[1] and epoch < curriculum_epoch[2]:
-        # config['embed_dim'] = [384] * depth
-        # embed_dim_choice = random.choice([384, 448])
-        embed_dim_choice = random.choices([384, 448], weights=[1, 0])[0] # (1, 3) -> (1, 1)
+        # config['embed_dim'] = [576] * depth
+        # embed_dim_choice = random.choice([576, 624])
+        embed_dim_choice = random.choices([576, 624], weights=[1, 1])[0] # (1, 3) -> (1, 1)
         config['embed_dim'] = [embed_dim_choice] * depth
         config['mlp_ratio'] = [random.choices([3.0, 3.5, 4.0], weights=[1, 1, 1])[0] for _ in range(depth)]
-        config['num_heads'] = [random.choices([5, 6, 7], weights=[1, 1, 1])[0] for _ in range(depth)]
+        config['num_heads'] = [random.choices([8, 9, 10], weights=[1, 1, 1])[0] for _ in range(depth)]
 
     else:
-        # config['embed_dim'] = [448] * depth
-        embed_dim_choice = random.choices([384, 448], weights=[1, 1])[0] # (1, 3) -> (1, 1)
+        # config['embed_dim'] = [624] * depth
+        embed_dim_choice = random.choices([576, 624], weights=[1, 1])[0] # (1, 3) -> (1, 1)
         config['embed_dim'] = [embed_dim_choice] * depth
         
         config['mlp_ratio'] = [random.choices([3.0, 3.5, 4.0], weights=[1, 1, 1])[0] for _ in range(depth)]
-        config['num_heads'] = [random.choices([5, 6, 7], weights=[1, 1, 1])[0] for _ in range(depth)]
+        config['num_heads'] = [random.choices([8, 9, 10], weights=[1, 1, 1])[0] for _ in range(depth)]
 
     config['layer_num'] = depth
     return config
@@ -351,20 +351,20 @@ def evaluate(data_loader, model, device, amp=True, choices=None, mode='super', r
     if mode == 'super':
         # config = sample_configs(choices=choices)
         # config = sample_configs_curriculum(choices=choices, epoch=epoch, curriculum_epoch=curriculum_epoch) 
-        # config = {'layer_num': 13, 'mlp_ratio': [4.0, 3.5, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 3.5, 3.5, 4.0, 3.5, 3.5], 'num_heads': [4, 3, 4, 3, 3, 4, 4, 3, 4, 4, 4, 3, 4], 'embed_dim': [384, 384, 384, 384, 384, 384, 384, 384, 384, 384, 384, 384, 384]}
-        # config = {'layer_num': 14, 'mlp_ratio': [4.0, 4.0, 3.5, 4.0, 3.5, 3.5, 3.5, 3.5, 4.0, 4.0, 3.5, 3.5, 3.5, 3.5], 'num_heads': [3, 3, 4, 4, 3, 3, 4, 4, 4, 4, 4, 3, 4, 3], 'embed_dim': [448, 448, 448, 448, 448, 448, 448, 448, 448, 448, 448, 448, 448, 448]}
+        # config = {'layer_num': 13, 'mlp_ratio': [4.0, 3.5, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 3.5, 3.5, 4.0, 3.5, 3.5], 'num_heads': [4, 3, 4, 3, 3, 4, 4, 3, 4, 4, 4, 3, 4], 'embed_dim': [576, 576, 576, 576, 576, 576, 576, 576, 576, 576, 576, 576, 576]}
+        # config = {'layer_num': 14, 'mlp_ratio': [4.0, 4.0, 3.5, 4.0, 3.5, 3.5, 3.5, 3.5, 4.0, 4.0, 3.5, 3.5, 3.5, 3.5], 'num_heads': [3, 3, 4, 4, 3, 3, 4, 4, 4, 4, 4, 3, 4, 3], 'embed_dim': [624, 624, 624, 624, 624, 624, 624, 624, 624, 624, 624, 624, 624, 624]}
         # if epoch % 2 == 1:
-        config = {'layer_num': 13, 
-                    'mlp_ratio': [3.0, 3.5, 4.0, 4.0, 4.0, 4.0, 3.5, 3.0, 4.0, 4.0, 3.5, 4.0, 3.5], 
-                    'num_heads': [7, 6, 6, 6, 5, 5, 5, 7, 7, 7, 6, 5, 6], 
-                    'embed_dim': [384, 384, 384, 384, 384, 384, 384, 384, 384, 384, 384, 384, 384]
-                    }
+        config =  {'mlp_ratio': [4.0, 3.5, 3.0, 4.0, 3.5, 4.0, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5], 
+                   'num_heads': [10, 10, 9, 9, 10, 10, 10, 9, 10, 10, 10, 10, 10, 10], 
+                   'embed_dim': [576, 576, 576, 576, 576, 576, 576, 576, 576, 576, 576, 576, 576, 576], 
+                   'layer_num': 14}
+# sampled model parameters: 54725224
         # else:
         #     config = {
         #         'layer_num': 14,
         #         'mlp_ratio': [4.0, 4.0, 3.5, 4.0, 3.5, 3.5, 3.5, 3.5, 4.0, 4.0, 3.5, 3.5, 3.5, 3.5],
         #         'num_heads': [3, 3, 4, 4, 3, 3, 4, 4, 4, 4, 4, 3, 4, 3],
-        #         'embed_dim': [448] * 14
+        #         'embed_dim': [624] * 14
         #     }
 
         model_module = unwrap_model(model)

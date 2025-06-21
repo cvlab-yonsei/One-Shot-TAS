@@ -40,16 +40,14 @@ class LinearSuper(nn.Linear):
                 mlp_ratios = sorted(set(choices['mlp_ratio']))
                 
                 # dim 0 기준 분할: embed_dim 기반
-                # dim0_splits = embed_dims + [self.super_in_dim if name == 'fc1' else self.super_out_dim]  # 예: [192, 216, 240, super_out_dim]
-                dim0_splits = embed_dims 
-
+                dim0_splits = embed_dims + [self.super_in_dim if name == 'fc1' else self.super_out_dim]  # 예: [192, 216, 240, super_out_dim]
+                
                 # dim 1 기준 분할: 모든 mlp_ratio * embed_dim 조합 (중복 제거 후 정렬)
                 dim1_sizes = set()
                 for e in embed_dims:
                     for r in mlp_ratios:
                         dim1_sizes.add(int(e * r))
-                # dim1_splits = sorted(dim1_sizes) + [self.super_out_dim if name == 'fc1' else self.super_in_dim]
-                dim1_splits = sorted(dim1_sizes)
+                dim1_splits = sorted(dim1_sizes) + [self.super_out_dim if name == 'fc1' else self.super_in_dim]
 
                 self.split_weights = nn.ParameterDict()
 
@@ -111,8 +109,7 @@ class LinearSuper(nn.Linear):
                 embed_dims = sorted(set(choices['embed_dim']))
 
                 # dim 1 기준: embed_dim 기준으로 쪼개기
-                # dim1_splits = embed_dims + [self.super_in_dim]  # dim=1은 input 방향
-                dim1_splits = embed_dims
+                dim1_splits = embed_dims + [self.super_in_dim]  # dim=1은 input 방향
 
                 self.split_weights = nn.ParameterDict()
                 for j in range(len(dim1_splits)):
@@ -135,20 +132,12 @@ class LinearSuper(nn.Linear):
             elif name == 'qkv' or name == 'proj':
                 embed_dims = sorted(set(choices['embed_dim']))
 
-                # if name == 'qkv':
-                #     dim0_splits = [d * 3 for d in embed_dims] + [self.super_out_dim]
-                #     dim1_splits = embed_dims + [self.super_in_dim]
-                # else:  # 'proj'
-                #     dim0_splits = embed_dims + [self.super_out_dim]
-                #     dim1_splits = embed_dims + [self.super_in_dim]
-
                 if name == 'qkv':
-                    dim0_splits = [d * 3 for d in embed_dims]
-                    dim1_splits = embed_dims 
+                    dim0_splits = [d * 3 for d in embed_dims] + [self.super_out_dim]
+                    dim1_splits = embed_dims + [self.super_in_dim]
                 else:  # 'proj'
-                    dim0_splits = embed_dims 
-                    dim1_splits = embed_dims 
-
+                    dim0_splits = embed_dims + [self.super_out_dim]
+                    dim1_splits = embed_dims + [self.super_in_dim]
 
                 self.split_weights = nn.ParameterDict()
                 for i in range(len(dim0_splits)):
@@ -276,9 +265,9 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
         embed_dims = sorted(set(choices['embed_dim']))
         mlp_ratios = sorted(set(choices['mlp_ratio']))
 
-        dim_embed = embed_dims
+        dim_embed = embed_dims + [self.super_in_dim if name == 'fc1' else self.super_out_dim]
         dim_mlp = sorted({int(e * r) for e in embed_dims for r in mlp_ratios})
-        # dim_mlp += [self.super_out_dim if name == 'fc1' else self.super_in_dim]
+        dim_mlp += [self.super_out_dim if name == 'fc1' else self.super_in_dim]
 
         if name == 'fc1':
             dim0_splits = dim_mlp
@@ -289,12 +278,12 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
 
     elif name == 'head':
         embed_dims = sorted(set(choices['embed_dim']))
-        dim1_splits = embed_dims
+        dim1_splits = embed_dims + [self.super_in_dim]
 
     elif name == 'qkv':
         embed_dims = sorted(set(choices['embed_dim']))
-        dim0_splits = [3 * e for e in embed_dims]
-        dim1_splits = embed_dims
+        dim0_splits = [3 * e for e in embed_dims] + [self.super_out_dim]
+        dim1_splits = embed_dims + [self.super_in_dim]
 
         # i_active = next(i for i, val in enumerate(dim0_splits) if val >= sample_out_dim)
         # j_active = next(j for j, val in enumerate(dim1_splits) if val >= sample_in_dim)
@@ -306,8 +295,8 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
 
     elif name == 'proj':
         embed_dims = sorted(set(choices['embed_dim']))
-        dim0_splits = embed_dims
-        dim1_splits = embed_dims
+        dim0_splits = embed_dims + [self.super_out_dim]
+        dim1_splits = embed_dims + [self.super_in_dim]
 
         # i_active = next(i for i, val in enumerate(dim0_splits) if val >= sample_out_dim)
         # j_active = next(j for j, val in enumerate(dim1_splits) if val >= sample_in_dim)
@@ -327,16 +316,14 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
                     self.split_weights[key].requires_grad = False
 
             if case_num == 1:
-                true_label = [(1, 1), (2, 1), (3, 1), (4, 1)]
+                true_label = [(1, 1), (2, 1), (3, 1)]
             elif case_num == 2:
-                # true_label = [(1, 2), (2, 2), (3, 2), (4, 2), (5, 1), (5, 2),
-                # (6, 1), (6, 2)]
-                true_label = [(1, 2), (1, 3), (2, 2), (2, 3), (3, 2), (3, 3), (4, 2), (4, 3), (5, 1), (5, 2),
-                (5, 3), (6, 1), (6, 2), (6, 3), (7, 1), (7, 2), (7, 3), (8, 1), (8, 2), (8, 3)]
+                # true_label = [(1, 2), (2, 2), (3, 2), (4, 1), (4, 2), (5, 1), (5, 2)]
+                true_label = [(1, 2), (1, 3), (2, 2), (2, 3), (3, 2), (3, 3), (4, 2), (4, 3), (5, 2), (5, 3), (6, 2), (6, 3), (7, 1), (7, 2), (7, 3), (8, 1), (8, 2), (8, 3), (9, 1), (9, 2), (9, 3)]
             elif case_num == 3:
-                true_label = [(1, 3), (2, 3), (3, 3), (4, 3),
-                (5, 3), (6, 3), (7, 1), (7, 2), (7, 3),
-                (8, 1), (8, 2), (8, 3)]
+                true_label = [
+                    (1, 2), (1, 3), (2, 2), (2, 3), (3, 2), (3, 3), (4, 2), (4, 3), (5, 2), (5, 3), (6, 2), (6, 3), (7, 1), (7, 2), (7, 3), (8, 1), (8, 2), (8, 3), (9, 1), (9, 2), (9, 3)
+                ]
 
             for i in range(len(dim0_splits)):
                 for j in range(len(dim1_splits)):
@@ -350,7 +337,7 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
 
         elif name == 'head':
             embed_dims = sorted(set(choices['embed_dim']))
-            dim1_splits = embed_dims
+            dim1_splits = embed_dims + [self.super_in_dim]
 
             if case_num == 1:
                 true_label = [(1)]
@@ -369,8 +356,8 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
 
         elif name == 'qkv':
             embed_dims = sorted(set(choices['embed_dim']))
-            dim0_splits = [3 * e for e in embed_dims]
-            dim1_splits = embed_dims
+            dim0_splits = [3 * e for e in embed_dims] + [self.super_out_dim]
+            dim1_splits = embed_dims + [self.super_in_dim]
 
             if case_num == 1:
                 true_label = [(1, 1)]
@@ -403,8 +390,8 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
 
         elif name == 'proj':
             embed_dims = sorted(set(choices['embed_dim']))
-            dim0_splits = embed_dims
-            dim1_splits = embed_dims
+            dim0_splits = embed_dims + [self.super_out_dim]
+            dim1_splits = embed_dims + [self.super_in_dim]
 
             if case_num == 1:
                 true_label = [(1, 1)]
@@ -452,61 +439,58 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
     # for key in self.split_weights:
     #     print(f"  {key:10s} -> {self.split_weights[key].requires_grad}")
 
-    # #################################
-    # # if name == 'head':
-    # # 걍 모든 종류에 대해서
-    # with torch.no_grad():
-    #     # 1. requires_grad=False 영역 마스크로 W_false 구함
-    #     full_mask = torch.zeros_like(full_weight, dtype=torch.bool)
-    #     row_offset = 0
-    #     for i in range(len(dim0_splits)):
-    #         col_offset = 0
-    #         for j in range(len(dim1_splits)):
-    #             key = f'w{i+1}_{j+1}'
-    #             block = self.split_weights[key]
-    #             h, w = block.shape
-    #             if block.requires_grad:
-    #                 full_mask[row_offset:row_offset + h, col_offset:col_offset + w] = True
-    #             col_offset += w
-    #         row_offset += h
+    #################################
+    # if name == 'head':
+    # 걍 모든 종류에 대해서
+    with torch.no_grad():
+        # 1. W_false 통합 계산
+        full_mask = torch.zeros_like(full_weight, dtype=torch.bool)
+        row_offset = 0
+        for i in range(len(dim0_splits)):
+            col_offset = 0
+            for j in range(len(dim1_splits)):
+                key = f'w{i+1}_{j+1}'
+                block = self.split_weights[key]
+                h, w = block.shape
+                requires_grad = block.requires_grad
+                full_mask[row_offset:row_offset + h, col_offset:col_offset + w] = requires_grad
+                col_offset += w
+            row_offset += h
 
-    #     W_false = full_weight[~full_mask]
-    #     min_false = W_false.min()
-    #     max_false = W_false.max()
+        W_false = full_weight[~full_mask]
+        mean_false = W_false.norm(p=2) / W_false.numel()
 
-    #     # 2. 각 블록 min-max scaling
-    #     offset_row = 0
-    #     for i in range(len(dim0_splits)):
-    #         offset_col = 0
-    #         for j in range(len(dim1_splits)):
-    #             key = f'w{i+1}_{j+1}'
-    #             block = self.split_weights[key]
-    #             h, w = block.shape
-    #             if block.requires_grad:
-    #                 current_block = full_weight[offset_row:offset_row + h, offset_col:offset_col + w]
-    #                 block_min = current_block.min()
-    #                 block_max = current_block.max()
-    #                 scale = (max_false - min_false) / (block_max - block_min + 1e-8)
-    #                 shift = min_false - block_min * scale
+        # 2. 각 requires_grad=True인 블록마다 개별 λ 적용
+        # 개별 block별로 requires_grad=True에 대해 λ 계산 및 scaling 적용
+        offset_row = 0
+        for i in range(len(dim0_splits)):
+            offset_col = 0
+            for j in range(len(dim1_splits)):
+                key = f'w{i+1}_{j+1}'
+                block = self.split_weights[key]
+                h, w = block.shape
+                if block.requires_grad:
+                    current_block = full_weight[offset_row:offset_row + h, offset_col:offset_col + w]
+                    mean_true = current_block.norm(p=2) / current_block.numel()
+                    λ = (mean_false / (mean_true + 1e-8)).detach()
+                    if torch.isnan(λ):
+                        print("name : ", name)
+                        print("key : ", key)
+                        print("W_false.numel() : ", W_false.numel())
+                        print(f"[⚠️ NaN λ] mean_false: {mean_false.item():.6f}, mean_true: {mean_true.item():.6f}")
 
-    #                 # in-place scaling
-    #                 current_block.mul_(scale).add_(shift)
+                    # ✔ 저장
+                    self.lambda_log[key] = λ.item()
 
-    #                 # 로그 저장
-    #                 self.lambda_log[key] = {
-    #                     'scale': scale.item(),
-    #                     'shift': shift.item(),
-    #                     'block_min': block_min.item(),
-    #                     'block_max': block_max.item()
-    #                 }
+                    full_weight[offset_row:offset_row + h, offset_col:offset_col + w] *= λ
+                offset_col += w
+            offset_row += h
 
-    #             offset_col += w
-    #         offset_row += h
 
-    # # 자르기
-    # sample_weight = full_weight[:sample_out_dim, :sample_in_dim]
+    # 잘라내기
+    sample_weight = full_weight[:sample_out_dim, :sample_in_dim]
 
-    # ##############################
+    ##############################
 
     return sample_weight
 
@@ -520,7 +504,6 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
     choices = self.choices
 
     sample_bias = []
-    full_bias = []
     
     if name in ['fc1', 'fc2']:
         embed_dims = sorted(set(choices['embed_dim']))
@@ -529,26 +512,26 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
 
         if name == 'fc1':
             dim0_sizes = sorted({int(e * r) for e in embed_dims for r in mlp_ratios})
-            # dim0_sizes += [self.super_out_dim]
+            dim0_sizes += [self.super_out_dim]
             if case_num is not None:
-                # if case_num == 1:
-                #     true_label = [(1)]
-                # elif case_num == 2:
-                #     # true_label = [(2), (3)]
-                #     true_label = [(2), (3), (4), (5), (6)]
-                # elif case_num == 3:
-                #     true_label = [(4), (5), (6)]
-
-                ## freeze를 확실히 하려면 이게 맞음.
-                if case_num == 1: 
-                    true_label = [(1), (2), (3), (4)]
+                if case_num == 1:
+                    true_label = [(1)]
                 elif case_num == 2:
-                    # true_label = [(5), (6)]
-                    true_label = [(5), (6), (7), (8)]
+                    # true_label = [(2), (3)]
+                    true_label = [(2), (3), (4), (5), (6)]
                 elif case_num == 3:
-                    true_label = [(8), (9)]
+                    true_label = [(4), (5), (6)]
+
+                # ## freeze를 확실히 하려면 이게 맞음.
+                # if case_num == 1: 
+                #     true_label = [(1), (2), (3)]
+                # elif case_num == 2:
+                #     # true_label = [(4), (5)]
+                #     true_label = [(4), (5), (6)]
+                # elif case_num == 3:
+                #     true_label = [(6)]
         else:
-            dim0_sizes = embed_dims
+            dim0_sizes = embed_dims + [self.super_out_dim]
             if case_num is not None:
                 if case_num == 1:
                     true_label = [(1)]
@@ -579,7 +562,7 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
 
         
 
-        # return sample_bias
+        return sample_bias
 
     elif name == 'head':
         # self.split_bias['bias'].requires_grad = True
@@ -599,7 +582,7 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
     
     elif name == 'qkv':
         embed_dims = sorted(set(choices['embed_dim']))
-        dim0_sizes = [3 * e for e in embed_dims] 
+        dim0_sizes = [3 * e for e in embed_dims] + [self.super_out_dim]
 
         collected_bias = []
         for i, dim in enumerate(dim0_sizes):
@@ -628,11 +611,11 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
 
         full_bias = torch.cat(collected_bias, dim=0)
         sample_bias = full_bias[:sample_out_dim]
-        # return sample_bias
+        return sample_bias
 
     elif name == 'proj':
         embed_dims = sorted(set(choices['embed_dim']))
-        dim0_sizes = embed_dims
+        dim0_sizes = embed_dims + [self.super_out_dim]
 
         collected_bias = []
         for i, dim in enumerate(dim0_sizes):
@@ -662,57 +645,46 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
         full_bias = torch.cat(collected_bias, dim=0)
         sample_bias = full_bias[:sample_out_dim]
 
-        # return sample_bias
+        return sample_bias
     
-    # ####################################
-    # # 🔹 alignment 삽입 (개별 min-max 정규화 방식)
-    # with torch.no_grad():
-    #     # 전체 full_bias에서 requires_grad=False 영역 기준 min/max 계산
-    #     mask = torch.zeros_like(full_bias, dtype=torch.bool)
-    #     offset = 0
-    #     for i in range(len(dim0_sizes)):
-    #         key = f'bias_{i+1}'
-    #         block = self.split_bias[key]
-    #         length = block.shape[0]
-    #         if block.requires_grad:
-    #             mask[offset:offset + length] = True
-    #         offset += length
+    ####################################
+    # 🔹 alignment 삽입 (개별 정규화 방식)
+    with torch.no_grad():
+        # 먼저 전체 full_bias에서 requires_grad=False 영역 기준 평균 계산
+        mask = torch.zeros_like(full_bias, dtype=torch.bool)
+        offset = 0
+        for i in range(len(dim0_sizes)):
+            key = f'bias_{i+1}'
+            block = self.split_bias[key]
+            length = block.shape[0]
+            requires_grad = block.requires_grad
+            mask[offset:offset + length] = requires_grad
+            offset += length
 
-    #     bias_false = full_bias[~mask]
-    #     min_false = bias_false.min()
-    #     max_false = bias_false.max()
+        bias_false = full_bias[~mask]
+        mean_false = bias_false.abs().mean()
 
-    #     # 각 requires_grad=True 블록에 대해 min-max scaling 적용
-    #     offset = 0
-    #     for i in range(len(dim0_sizes)):
-    #         key = f'bias_{i+1}'
-    #         block = self.split_bias[key]
-    #         length = block.shape[0]
-    #         if block.requires_grad:
-    #             current_block = full_bias[offset:offset + length]
-    #             block_min = current_block.min()
-    #             block_max = current_block.max()
+        # 개별 block별로 requires_grad=True에 대해 λ 계산 및 scaling 적용
+        offset = 0
+        for i in range(len(dim0_sizes)):
+            key = f'bias_{i+1}'
+            block = self.split_bias[key]
+            length = block.shape[0]
+            if block.requires_grad:
+                current_block = full_bias[offset:offset + length]
+                mean_true = current_block.abs().mean()
+                λ = (mean_false / (mean_true + 1e-8)).detach()
 
-    #             scale = (max_false - min_false) / (block_max - block_min + 1e-8)
-    #             shift = min_false - block_min * scale
+                # ✔ 저장
+                self.lambda_log[key] = λ.item()
 
-    #             current_block.mul_(scale).add_(shift)
+                full_bias[offset:offset + length] *= λ
+            offset += length
 
-    #             # ✔ 로그 저장
-    #             self.lambda_log[key] = {
-    #                 'scale': scale.item(),
-    #                 'shift': shift.item(),
-    #                 'block_min': block_min.item(),
-    #                 'block_max': block_max.item()
-    #             }
-
-    #         offset += length
-
-    # # 마지막 슬라이스
-    # sample_bias = full_bias[:sample_out_dim]
-    # return sample_bias
-    # ####################################
-
+    # 마지막 슬라이스
+    sample_bias = full_bias[:sample_out_dim]
+    return sample_bias
+    ####################################
 
     
     return sample_bias

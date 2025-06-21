@@ -40,16 +40,14 @@ class LinearSuper(nn.Linear):
                 mlp_ratios = sorted(set(choices['mlp_ratio']))
                 
                 # dim 0 기준 분할: embed_dim 기반
-                # dim0_splits = embed_dims + [self.super_in_dim if name == 'fc1' else self.super_out_dim]  # 예: [192, 216, 240, super_out_dim]
-                dim0_splits = embed_dims 
-
+                dim0_splits = embed_dims + [self.super_in_dim if name == 'fc1' else self.super_out_dim]  # 예: [192, 216, 240, super_out_dim]
+                
                 # dim 1 기준 분할: 모든 mlp_ratio * embed_dim 조합 (중복 제거 후 정렬)
                 dim1_sizes = set()
                 for e in embed_dims:
                     for r in mlp_ratios:
                         dim1_sizes.add(int(e * r))
-                # dim1_splits = sorted(dim1_sizes) + [self.super_out_dim if name == 'fc1' else self.super_in_dim]
-                dim1_splits = sorted(dim1_sizes)
+                dim1_splits = sorted(dim1_sizes) + [self.super_out_dim if name == 'fc1' else self.super_in_dim]
 
                 self.split_weights = nn.ParameterDict()
 
@@ -111,8 +109,7 @@ class LinearSuper(nn.Linear):
                 embed_dims = sorted(set(choices['embed_dim']))
 
                 # dim 1 기준: embed_dim 기준으로 쪼개기
-                # dim1_splits = embed_dims + [self.super_in_dim]  # dim=1은 input 방향
-                dim1_splits = embed_dims
+                dim1_splits = embed_dims + [self.super_in_dim]  # dim=1은 input 방향
 
                 self.split_weights = nn.ParameterDict()
                 for j in range(len(dim1_splits)):
@@ -135,20 +132,12 @@ class LinearSuper(nn.Linear):
             elif name == 'qkv' or name == 'proj':
                 embed_dims = sorted(set(choices['embed_dim']))
 
-                # if name == 'qkv':
-                #     dim0_splits = [d * 3 for d in embed_dims] + [self.super_out_dim]
-                #     dim1_splits = embed_dims + [self.super_in_dim]
-                # else:  # 'proj'
-                #     dim0_splits = embed_dims + [self.super_out_dim]
-                #     dim1_splits = embed_dims + [self.super_in_dim]
-
                 if name == 'qkv':
-                    dim0_splits = [d * 3 for d in embed_dims]
-                    dim1_splits = embed_dims 
+                    dim0_splits = [d * 3 for d in embed_dims] + [self.super_out_dim]
+                    dim1_splits = embed_dims + [self.super_in_dim]
                 else:  # 'proj'
-                    dim0_splits = embed_dims 
-                    dim1_splits = embed_dims 
-
+                    dim0_splits = embed_dims + [self.super_out_dim]
+                    dim1_splits = embed_dims + [self.super_in_dim]
 
                 self.split_weights = nn.ParameterDict()
                 for i in range(len(dim0_splits)):
@@ -276,9 +265,9 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
         embed_dims = sorted(set(choices['embed_dim']))
         mlp_ratios = sorted(set(choices['mlp_ratio']))
 
-        dim_embed = embed_dims
+        dim_embed = embed_dims + [self.super_in_dim if name == 'fc1' else self.super_out_dim]
         dim_mlp = sorted({int(e * r) for e in embed_dims for r in mlp_ratios})
-        # dim_mlp += [self.super_out_dim if name == 'fc1' else self.super_in_dim]
+        dim_mlp += [self.super_out_dim if name == 'fc1' else self.super_in_dim]
 
         if name == 'fc1':
             dim0_splits = dim_mlp
@@ -289,12 +278,12 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
 
     elif name == 'head':
         embed_dims = sorted(set(choices['embed_dim']))
-        dim1_splits = embed_dims
+        dim1_splits = embed_dims + [self.super_in_dim]
 
     elif name == 'qkv':
         embed_dims = sorted(set(choices['embed_dim']))
-        dim0_splits = [3 * e for e in embed_dims]
-        dim1_splits = embed_dims
+        dim0_splits = [3 * e for e in embed_dims] + [self.super_out_dim]
+        dim1_splits = embed_dims + [self.super_in_dim]
 
         # i_active = next(i for i, val in enumerate(dim0_splits) if val >= sample_out_dim)
         # j_active = next(j for j, val in enumerate(dim1_splits) if val >= sample_in_dim)
@@ -306,8 +295,8 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
 
     elif name == 'proj':
         embed_dims = sorted(set(choices['embed_dim']))
-        dim0_splits = embed_dims
-        dim1_splits = embed_dims
+        dim0_splits = embed_dims + [self.super_out_dim]
+        dim1_splits = embed_dims + [self.super_in_dim]
 
         # i_active = next(i for i, val in enumerate(dim0_splits) if val >= sample_out_dim)
         # j_active = next(j for j, val in enumerate(dim1_splits) if val >= sample_in_dim)
@@ -327,16 +316,19 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
                     self.split_weights[key].requires_grad = False
 
             if case_num == 1:
-                true_label = [(1, 1), (2, 1), (3, 1), (4, 1)]
+                true_label = [(1, 1), (2, 1), (3, 1)]
             elif case_num == 2:
-                # true_label = [(1, 2), (2, 2), (3, 2), (4, 2), (5, 1), (5, 2),
-                # (6, 1), (6, 2)]
-                true_label = [(1, 2), (1, 3), (2, 2), (2, 3), (3, 2), (3, 3), (4, 2), (4, 3), (5, 1), (5, 2),
-                (5, 3), (6, 1), (6, 2), (6, 3), (7, 1), (7, 2), (7, 3), (8, 1), (8, 2), (8, 3)]
+                # true_label = [(1, 2), (2, 2), (3, 2), (4, 1), (4, 2), (5, 1), (5, 2)]
+                true_label = [(1, 2), (2, 2), (3, 2), (4, 2), (5, 2),
+                              (1, 3), (2, 3), (3, 3),
+                    (4, 3), (5, 3),
+                    (6, 2), (6, 3), (7, 1), (7, 2), (7, 3), (8, 1), (8, 2), (8, 3), (9, 1), (9, 2), (9, 3)]
             elif case_num == 3:
-                true_label = [(1, 3), (2, 3), (3, 3), (4, 3),
-                (5, 3), (6, 3), (7, 1), (7, 2), (7, 3),
-                (8, 1), (8, 2), (8, 3)]
+                true_label = [
+                    (1, 3), (2, 3), (3, 3),
+                    (4, 3), (5, 3),
+                    (6, 1), (6, 2), (6, 3)
+                ]
 
             for i in range(len(dim0_splits)):
                 for j in range(len(dim1_splits)):
@@ -350,7 +342,7 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
 
         elif name == 'head':
             embed_dims = sorted(set(choices['embed_dim']))
-            dim1_splits = embed_dims
+            dim1_splits = embed_dims + [self.super_in_dim]
 
             if case_num == 1:
                 true_label = [(1)]
@@ -369,8 +361,8 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
 
         elif name == 'qkv':
             embed_dims = sorted(set(choices['embed_dim']))
-            dim0_splits = [3 * e for e in embed_dims]
-            dim1_splits = embed_dims
+            dim0_splits = [3 * e for e in embed_dims] + [self.super_out_dim]
+            dim1_splits = embed_dims + [self.super_in_dim]
 
             if case_num == 1:
                 true_label = [(1, 1)]
@@ -403,8 +395,8 @@ def sample_weight(self, sample_in_dim, sample_out_dim, sample_in_dim_prev=None, 
 
         elif name == 'proj':
             embed_dims = sorted(set(choices['embed_dim']))
-            dim0_splits = embed_dims
-            dim1_splits = embed_dims
+            dim0_splits = embed_dims + [self.super_out_dim]
+            dim1_splits = embed_dims + [self.super_in_dim]
 
             if case_num == 1:
                 true_label = [(1, 1)]
@@ -529,7 +521,7 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
 
         if name == 'fc1':
             dim0_sizes = sorted({int(e * r) for e in embed_dims for r in mlp_ratios})
-            # dim0_sizes += [self.super_out_dim]
+            dim0_sizes += [self.super_out_dim]
             if case_num is not None:
                 # if case_num == 1:
                 #     true_label = [(1)]
@@ -541,14 +533,14 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
 
                 ## freeze를 확실히 하려면 이게 맞음.
                 if case_num == 1: 
-                    true_label = [(1), (2), (3), (4)]
+                    true_label = [(1), (2), (3)]
                 elif case_num == 2:
-                    # true_label = [(5), (6)]
-                    true_label = [(5), (6), (7), (8)]
+                    # true_label = [(4), (5)]
+                    true_label = [(7), (8), (9)]
                 elif case_num == 3:
-                    true_label = [(8), (9)]
+                    true_label = [(6)]
         else:
-            dim0_sizes = embed_dims
+            dim0_sizes = embed_dims + [self.super_out_dim]
             if case_num is not None:
                 if case_num == 1:
                     true_label = [(1)]
@@ -599,7 +591,7 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
     
     elif name == 'qkv':
         embed_dims = sorted(set(choices['embed_dim']))
-        dim0_sizes = [3 * e for e in embed_dims] 
+        dim0_sizes = [3 * e for e in embed_dims] + [self.super_out_dim]
 
         collected_bias = []
         for i, dim in enumerate(dim0_sizes):
@@ -632,7 +624,7 @@ def sample_bias(self, sample_out_dim, sample_out_dim_prev=None, pretrained=False
 
     elif name == 'proj':
         embed_dims = sorted(set(choices['embed_dim']))
-        dim0_sizes = embed_dims
+        dim0_sizes = embed_dims + [self.super_out_dim]
 
         collected_bias = []
         for i, dim in enumerate(dim0_sizes):

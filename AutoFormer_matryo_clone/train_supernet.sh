@@ -231,15 +231,21 @@
 # --resume '/OUTPUT_PATH/checkpoint-original-only192216-training-100-460-23.pth' --output /OUTPUT_PATH --batch-size 128 \
 # --save_checkpoint_path 'checkpoint-original-only192216-training-100-460-240-lr00005-allfreeze-' --save_log_path './log/supernet_original_only192216_training_100_460_240_lr00005_allfreeze.log'
 
-python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train_load_matryo_384_440.py --data-path '/dataset/ILSVRC2012' --gp \
---change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-S.yaml --epochs 20 --warmup-epochs 0 \
---resume '/OUTPUT_PATH/checkpoint-original-small-400-500-12-123-25.pth' --output /OUTPUT_PATH --batch-size 128 \
---save_checkpoint_path 'checkpoint-original-small-400-500-12-123-25-384-440-1-1-lr00005-allfreeze-' --save_log_path './log/supernet_original-small-400-500-12-123-25-384-440-1-1_lr00005_allfreeze.log'
+# python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train_load_matryo_384_440.py --data-path '/dataset/ILSVRC2012' --gp \
+# --change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-S.yaml --epochs 20 --warmup-epochs 0 \
+# --resume '/OUTPUT_PATH/checkpoint-original-small-400-500-12-123-25.pth' --output /OUTPUT_PATH --batch-size 128 \
+# --save_checkpoint_path 'checkpoint-original-small-400-500-12-123-25-384-440-1-0-lr00005-allfreeze-tuple-' --save_log_path './log/supernet_original-small-400-500-12-123-25-384-440-1-0_lr00005_allfreeze_tuple.log'
 
-python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train_load_matryo_384_440.py --data-path '/dataset/ILSVRC2012' --gp \
---change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-S.yaml --epochs 20 --warmup-epochs 0 \
---resume '/OUTPUT_PATH/checkpoint-original-small-400-500-12-123-25.pth' --output /OUTPUT_PATH --batch-size 128 \
---save_checkpoint_path 'checkpoint-original-small-400-500-12-123-25-384-440-1-1-lr00002-allfreeze-' --save_log_path './log/supernet_original-small-400-500-12-123-25-384-440-1-1_lr00002_allfreeze.log'
+python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train_load_matryo_576_624.py --data-path '/dataset/ILSVRC2012' --gp \
+--change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-B.yaml --epochs 20 --warmup-epochs 0 \
+--resume '/OUTPUT_PATH/checkpoint-original-base-200-500-12-123-25.pth' --output /OUTPUT_PATH --batch-size 128 \
+--save_checkpoint_path 'checkpoint-original-base-200-500-12-123-1-1-lr000005-allfreeze-tuple-' --save_log_path './log/supernet_checkpoint-original-base-200-500-12-123-25-1-1_lr000005_allfreeze_tuple.log'
+
+
+# python -m torch.distributed.launch --nproc_per_node=8 --use_env supernet_train_load_matryo_384_440.py --data-path '/dataset/ILSVRC2012' --gp \
+# --change_qk --relative_position --mode super --dist-eval --cfg ./experiments/supernet/supernet-S.yaml --epochs 20 --warmup-epochs 0 \
+# --resume '/OUTPUT_PATH/checkpoint-original-small-400-500-12-123-25.pth' --output /OUTPUT_PATH --batch-size 128 \
+# --save_checkpoint_path 'checkpoint-original-small-400-500-12-123-25-384-440-1-1-lr00002-allfreeze-' --save_log_path './log/supernet_original-small-400-500-12-123-25-384-440-1-1_lr00002_allfreeze.log'
 
 
 
